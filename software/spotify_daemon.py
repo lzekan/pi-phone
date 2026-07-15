@@ -8,8 +8,8 @@ import os
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-TOKEN_FILE = "/home/lukaz/pi-phone/software/tokens.json"
-STATE_FILE = "/home/lukaz/pi-phone/software/state.json"
+TOKEN_FILE = "/home/lukaz/pi-phone/tokens/tokens.json"
+SONG_STATE_FILE = "/home/lukaz/pi-phone/state/song_state.json"
 
 def load_refresh_token():
     with open(TOKEN_FILE, "r") as f:
@@ -88,7 +88,7 @@ while True:
                 "image_url": image_url
             }
 
-            with open(STATE_FILE, "w", encoding="utf-8") as f:
+            with open(SONG_STATE_FILE, "w", encoding="utf-8") as f:
                 json.dump(state, f, indent=4, ensure_ascii=False)
 
             print(state)
