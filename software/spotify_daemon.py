@@ -6,9 +6,10 @@ import time
 import json
 import os
 
-CLIENT_ID = "82e8e1b184b54b5a9d534f6382a8f9e2"
-CLIENT_SECRET = "93ed466fd50e498a8fb9c0e486ecebe7"
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 TOKEN_FILE = "/home/lukaz/pi-phone/software/tokens.json"
+STATE_FILE = "/home/lukaz/pi-phone/software/state.json"
 
 def load_refresh_token():
     with open(TOKEN_FILE, "r") as f:
@@ -74,10 +75,24 @@ while True:
         data = r.json()
 
         if data and data.get("item"):
-            track = data["item"]["name"]
-            artist = data["item"]["artists"][0]["name"]
+            images = data["item"]["album"]["images"]
+            image_url = images[0]["url"] if images else None
 
-            print(f"{track} - {artist}")
+            state = {
+                "track_id": data["item"]["id"],
+                "track": data["item"]["name"],
+                "artist": data["item"]["artists"][0]["name"],
+                "progress_ms": data["progress_ms"],
+                "duration_ms": data["item"]["duration_ms"],
+                "is_playing": data["is_playing"],
+                "image_url": image_url
+            }
+
+            with open(STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=4, ensure_ascii=False)
+
+            print(state)
+
         else:
             print("Nothing playing")
 
