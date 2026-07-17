@@ -1,7 +1,0 @@
-{
-    "screen": "home",        
-    "mode": "spotify",      
-    "playing": true,
-    "connected": true,
-    "output": "bluetooth" 
-}
