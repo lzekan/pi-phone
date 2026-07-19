@@ -1,17 +1,10 @@
 {
-    "track_id": "6DXLO8LndZMVOHM0wNbpzg",
-    "track": "Danza Kuduro",
-    "artist": "Don Omar",
-    "progress_ms": 187021,
-    "duration_ms": 198786,
+    "track_id": "6yi3BJB9taHiIl9mCyrMAk",
+    "track": "Grme Trube",
+    "artist": "Bane Mojicevic",
+    "progress_ms": 44730,
+    "duration_ms": 203866,
     "is_playing": true,
-    "image_url": "https://i.scdn.co/image/ab67616d0000b273d4c273fe23a0950d7ac9fce2",
-    "next_song": {
-        "track_id": "33YO0AzultyW7E4o8ovVjX",
-        "track": "Kad bi' bio bijelo dugme",
-        "artist": "Bijelo Dugme",
-        "uri": "spotify:track:33YO0AzultyW7E4o8ovVjX",
-        "duration_ms": 621916,
-        "image_url": "https://i.scdn.co/image/ab67616d0000b273f3d2de308c3ab0fd97f43264"
-    }
+    "image_url": "https://i.scdn.co/image/ab67616d0000b2737437336af6534c30057ca00f",
+    "next_song": null
 }
