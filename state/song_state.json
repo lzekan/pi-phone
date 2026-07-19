@@ -1,10 +1,17 @@
 {
-    "track_id": "5pH9bbWrLgZLz0a4VNxIbg",
-    "track": "Sa Mog Prozora",
-    "artist": "TBF",
-    "progress_ms": 69994,
-    "duration_ms": 273626,
+    "track_id": "6DXLO8LndZMVOHM0wNbpzg",
+    "track": "Danza Kuduro",
+    "artist": "Don Omar",
+    "progress_ms": 187021,
+    "duration_ms": 198786,
     "is_playing": true,
-    "image_url": "https://i.scdn.co/image/ab67616d0000b273e66dfd519d3f77fddb70cf03",
-    "next_song": null
+    "image_url": "https://i.scdn.co/image/ab67616d0000b273d4c273fe23a0950d7ac9fce2",
+    "next_song": {
+        "track_id": "33YO0AzultyW7E4o8ovVjX",
+        "track": "Kad bi' bio bijelo dugme",
+        "artist": "Bijelo Dugme",
+        "uri": "spotify:track:33YO0AzultyW7E4o8ovVjX",
+        "duration_ms": 621916,
+        "image_url": "https://i.scdn.co/image/ab67616d0000b273f3d2de308c3ab0fd97f43264"
+    }
 }

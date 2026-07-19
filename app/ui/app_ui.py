@@ -3,7 +3,7 @@ from threading import Thread
 from tkinter import *
 from tkinter import ttk
 
-from app.controller.controller_home import load_home
+from app.controller.controller_home import get_playlist_tracks, load_home
 from app.controller.controller_navigation import go_home, go_player
 from app.controller.controller_player import (
     on_next,
@@ -62,6 +62,18 @@ def _get_progress_ms(song, now):
         progress_ms += (now - last_update_time) * 1000
 
     return min(max(0, progress_ms), duration)
+
+def _get_progress_min_sec(song, now):
+    progress_ms = _get_progress_ms(song, now)
+    minutes = int(progress_ms / 60000)
+    seconds = int((progress_ms % 60000) / 1000)
+    return f"{minutes}:{seconds:02d}"
+
+def _get_duration_min_sec(song):
+    duration_ms = song.get("duration_ms", 0)
+    minutes = int(duration_ms / 60000)
+    seconds = int((duration_ms % 60000) / 1000)
+    return f"{minutes}:{seconds:02d}"
 
 
 def _seek_position_ms(x, width, duration_ms):
@@ -201,6 +213,7 @@ def start_ui(root):
     cover_label = Label(cover_frame, bg="black", borderwidth=0, highlightthickness=0)
     track_label = Label(player_frame, fg="white", bg="black", font=("Arial", 20))
     artist_label = Label(player_frame, fg="gray", bg="black", font=("Arial", 14))
+    progess_min_sec_label = Label(player_frame, fg="gray", bg="black", font=("Arial", 10))
     progress = ttk.Progressbar(player_frame, orient="horizontal", length=300, mode="determinate")
 
     controls = Frame(player_frame, bg="black")
@@ -212,6 +225,7 @@ def start_ui(root):
     cover_label.pack(fill=BOTH, expand=True)
     track_label.pack(pady=10)
     artist_label.pack(pady=5)
+    progess_min_sec_label.pack(pady=5)
     progress.pack(pady=20)
     controls.pack(pady=10)
     prev_button.pack(side=LEFT, padx=5)
@@ -247,6 +261,20 @@ def start_ui(root):
     progress.bind("<Button-1>", start_seek)
     progress.bind("<B1-Motion>", update_seek_preview)
     progress.bind("<ButtonRelease-1>", finish_seek)
+
+    def print_playlist_tracks(playlist_uri, playlist_name):
+        def load_and_print():
+            tracks = get_playlist_tracks(playlist_uri)
+            if tracks is None:
+                return
+            print(f"\n[PLAYLIST] {playlist_name} ({len(tracks)} tracks)")
+            for index, track in enumerate(tracks, start=1):
+                print(
+                    f'{index}. {track.get("name", "")} — '
+                    f'{track.get("artist", "")} [{track.get("uri", "")}]'
+                )
+
+        Thread(target=load_and_print, daemon=True).start()
 
     def rebuild_home_lists(state):
         nonlocal recent_signature, playlist_signature
@@ -323,17 +351,28 @@ def start_ui(root):
                     cover = Label(cover_frame, bg="#282828", borderwidth=0, highlightthickness=0)
                     cover.pack(fill=BOTH, expand=True)
 
-                    Label(
+                    name_label = Label(
                         card,
                         text=playlist.get("name", ""),
                         fg="white",
                         bg="#181818",
                         anchor="center",
                         font=("DejaVu Sans", 9, "bold"),
-                    ).pack(fill=X, padx=5)
+                    )
+                    name_label.pack(fill=X, padx=5)
 
                     image_url = playlist.get("image_url")
                     expected_uri = playlist.get("uri")
+
+                    if expected_uri:
+                        for widget in (card, cover_frame, cover, name_label):
+                            widget.config(cursor="hand2")
+                            widget.bind(
+                                "<Button-1>",
+                                lambda _event, uri=expected_uri, name=playlist.get("name", ""): (
+                                    print_playlist_tracks(uri, name)
+                                ),
+                            )
 
                     def show_playlist_cover(photo, label=cover, uri=expected_uri):
                         current_uris = {item.get("uri") for item in get_state().get("playlists", [])}
@@ -432,6 +471,7 @@ def start_ui(root):
         artist = song.get("artist", "")
         track_label.config(text=track)
         artist_label.config(text=artist)
+        progess_min_sec_label.config(text=f"{_get_progress_min_sec(song, time.time())} / {(_get_duration_min_sec(song))}")
         mini_track.config(text=track or "Nothing playing")
         mini_artist.config(text=artist)
 

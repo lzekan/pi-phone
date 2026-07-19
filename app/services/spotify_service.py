@@ -13,6 +13,8 @@ _access_token = None
 _token_expires_at = 0
 _token_lock = threading.Lock()
 
+id_me = None
+
 def _get_token():
     global _access_token, _token_expires_at
 
@@ -173,3 +175,24 @@ def get_me():
         return r.json()
 
     return None
+
+def get_playlist_tracks(playlist_uri):
+    token = _get_token()
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+    tracks = []
+    url = f"https://api.spotify.com/v1/playlists/{playlist_uri.split(':')[-1]}/items?limit=50"
+
+    while url:
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT
+        )
+        response.raise_for_status()
+        data = response.json()
+        tracks.extend(data.get("items", []))
+        url = data.get("next")
+
+    return tracks
