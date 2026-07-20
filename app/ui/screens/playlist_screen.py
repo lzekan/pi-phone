@@ -65,9 +65,9 @@ def render_playlist(root, state, button_style):
             tracks_dragged = True
         tracks_canvas.scan_dragto(0, tracks_canvas_y(event), gain=1)
 
-    def finish_track_press(_event, track_uri):
+    def finish_track_press(_event, track_uri, playlist_uri):
         if not tracks_dragged and track_uri:
-            play_selected_track(track_uri)
+            play_selected_track(track_uri, playlist_uri)
 
     for widget in (tracks_canvas, tracks_list):
         widget.bind("<ButtonPress-1>", start_tracks_drag)
@@ -177,7 +177,9 @@ def render_playlist(root, state, button_style):
                 widget.bind("<B1-Motion>", drag_tracks)
                 widget.bind(
                     "<ButtonRelease-1>",
-                    lambda event, uri=track_uri: finish_track_press(event, uri),
+                    lambda event, uri=track_uri, context=playlist_uri: (
+                        finish_track_press(event, uri, context)
+                    ),
                 )
 
             def show_cover(photo, label=image_label, expected_playlist_uri=playlist_uri):

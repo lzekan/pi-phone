@@ -1,17 +1,17 @@
 {
-    "track_id": "3MaPuudm3WevEmzdoNxEE1",
-    "track": "cash legale",
-    "artist": "Caldo",
-    "progress_ms": 37576,
-    "duration_ms": 139333,
+    "track_id": "7c6tStwV6c6e8RLLGLKp1y",
+    "track": "Sargiju Mi Razbile Barabe",
+    "artist": "Izvorni Dar Braca Pejinovic",
+    "progress_ms": 116826,
+    "duration_ms": 222824,
     "is_playing": true,
-    "image_url": "https://i.scdn.co/image/ab67616d0000b27327388f7ff59f22ac0493df0f",
+    "image_url": "https://i.scdn.co/image/ab67616d0000b27371ee89c74fd76f8706c0f81e",
     "next_song": {
-        "track_id": "4qFrGuly7KCl3WMmGuECFC",
-        "track": "CLAP CLAP (feat. Artie 5ive, Niky Savage)",
-        "artist": "Sadturs",
-        "uri": "spotify:track:4qFrGuly7KCl3WMmGuECFC",
-        "duration_ms": 133874,
-        "image_url": "https://i.scdn.co/image/ab67616d0000b273549e124eb036aa1c469c1dbb"
+        "track_id": "36wxwc6UadODIbN0JFKCer",
+        "track": "Ti si mala za sargiju znala",
+        "artist": "Mirsada i Jarani",
+        "uri": "spotify:track:36wxwc6UadODIbN0JFKCer",
+        "duration_ms": 290468,
+        "image_url": "https://i.scdn.co/image/ab67616d0000b27338fd05b952d81d22644ca830"
     }
 }

@@ -104,17 +104,25 @@ def seek(position_ms):
     )
     response.raise_for_status()
 
-def play_track(uri):
+def play_track(uri, context_uri=None):
     token = _get_token()
 
     headers = {
         "Authorization": f"Bearer {token}"
     }
 
+    playback = {"uris": [uri]}
+    if context_uri:
+        playback = {
+            "context_uri": context_uri,
+            "offset": {"uri": uri},
+            "position_ms": 0
+        }
+
     response = requests.put(
         "https://api.spotify.com/v1/me/player/play",
         headers=headers,
-        json={"uris": [uri]},
+        json=playback,
         timeout=REQUEST_TIMEOUT
     )
     response.raise_for_status()
