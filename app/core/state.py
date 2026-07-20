@@ -14,7 +14,11 @@ _state = {
     "playlists": [],
     "user": {},
     "home_loading": False,
-    "home_error": None
+    "home_error": None,
+    "playlist_error": None,
+    "current_playlist_uri": None,
+    "current_playlist_name": None,
+    "current_playlist_tracks": None,
 }
 
 

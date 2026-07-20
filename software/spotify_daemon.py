@@ -13,7 +13,7 @@ SONG_STATE_FILE = "/home/lukaz/pi-phone/state/song_state.json"
 RECENT_TRACKS_FILE = "/home/lukaz/pi-phone/state/recent_tracks.json"
 PRELOAD_BEFORE_END_MS = 30000
 QUEUE_REFRESH_SECONDS = 5
-POLL_SECONDS = 5
+POLL_SECONDS = 3
 RECENT_TRACKS_LIMIT = 5
 REQUEST_TIMEOUT = (3.05, 10)
 

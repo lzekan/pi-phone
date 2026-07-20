@@ -14,8 +14,10 @@ pending_track_change = False
 track_before_change = None
 track_change_start = 0
 
-TRACK_CHANGE_TIMEOUT = 8
+TRACK_CHANGE_TIMEOUT = 5
 TRACK_CHANGE_SETTLE_TIME = 0.35
+SEEK_CONFIRM_TIMEOUT = 5
+SEEK_CONFIRM_TOLERANCE_MS = 1500
 
 
 def expect_track_change():
@@ -103,8 +105,21 @@ def start_sync(root):
                 else:
                     song_state["progress_ms"] = incoming
             else:
-                if abs(incoming - pending_seek_position) < 1500 or now - seek_start_time > 2:
-                    song_state["progress_ms"] = incoming
+                seek_elapsed = now - seek_start_time
+                expected_position = pending_seek_position
+                if song_state.get("is_playing"):
+                    expected_position += seek_elapsed * 1000
+
+                seek_confirmed = (
+                    pending_seek_position - SEEK_CONFIRM_TOLERANCE_MS
+                    <= incoming
+                    <= expected_position + SEEK_CONFIRM_TOLERANCE_MS
+                )
+
+                if seek_confirmed:
+                    song_state["progress_ms"] = max(incoming, int(expected_position))
+                    pending_seek_position = None
+                elif seek_elapsed >= SEEK_CONFIRM_TIMEOUT:
                     pending_seek_position = None
 
             # ---- PLAY ----

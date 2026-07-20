@@ -2,8 +2,8 @@ from threading import Thread
 from tkinter import BOTH, BOTTOM, HORIZONTAL, LEFT, NORMAL, RIGHT, TOP, X
 from tkinter import Button, Canvas, Frame, Label, Scrollbar
 
-from app.controller.controller_home import get_playlist_tracks, load_home
-from app.controller.controller_navigation import go_player
+from app.controller.controller_home import load_home
+from app.controller.controller_navigation import go_player, go_playlist
 from app.controller.controller_player import on_toggle_play, play_selected_track
 from app.core.state import get_state
 from app.services.image_cache import get_photo_async
@@ -97,7 +97,9 @@ def render_home(root, state, button_style):
 
     def finish_playlist_press(_event, playlist_uri, playlist_name):
         if not playlist_dragged:
-            print_playlist_tracks(playlist_uri, playlist_name)
+            state["current_playlist_name"] = playlist_name
+            state["current_playlist_uri"] = playlist_uri
+            go_playlist()
 
     for widget in (playlist_canvas, playlist_list):
         widget.bind("<ButtonPress-1>", start_playlist_drag)
@@ -131,20 +133,6 @@ def render_home(root, state, button_style):
     recent_signature = None
     playlist_signature = None
     mini_cover_key = None
-
-    def print_playlist_tracks(playlist_uri, playlist_name):
-        def load_and_print():
-            tracks = get_playlist_tracks(playlist_uri)
-            if tracks is None:
-                return
-            print(f"\n[PLAYLIST] {playlist_name} ({len(tracks)} tracks)")
-            for index, track in enumerate(tracks, start=1):
-                print(
-                    f'{index}. {track.get("name", "")} — '
-                    f'{track.get("artist", "")} [{track.get("uri", "")}]'
-                )
-
-        Thread(target=load_and_print, daemon=True).start()
 
     def rebuild_lists(current_state):
         nonlocal recent_signature, playlist_signature

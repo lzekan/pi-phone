@@ -4,6 +4,7 @@ from app.controller.controller_navigation import go_home
 from app.core.state import get_state
 from app.ui.screens.home_screen import render_home
 from app.ui.screens.player_screen import render_player
+from app.ui.screens.playlist_screen import render_playlist
 
 
 BUTTON_STYLE = {
@@ -28,6 +29,7 @@ def start_ui(root):
 
     home_screen = render_home(root, get_state(), BUTTON_STYLE)
     player_screen = render_player(root, get_state(), BUTTON_STYLE)
+    playlist_screen = render_playlist(root, get_state(), BUTTON_STYLE)
     visible_screen = None
 
     def render():
@@ -37,6 +39,10 @@ def start_ui(root):
         song = state["song"]
         screen = state.get("screen", "home")
 
+        if screen == "playlist" and not state.get("current_playlist_uri"):
+            state["screen"] = "home"
+            screen = "home"
+
         if not song.get("track_id") and screen == "player":
             state["screen"] = "home"
             screen = "home"
@@ -45,11 +51,20 @@ def start_ui(root):
             visible_screen = screen
             home_screen["frame"].pack_forget()
             player_screen["frame"].pack_forget()
-            current = player_screen if screen == "player" else home_screen
+            playlist_screen["frame"].pack_forget()
+
+            if screen == "player":
+                current = player_screen
+            elif screen == "playlist":
+                current = playlist_screen
+            else:
+                current = home_screen
+
             current["frame"].pack(fill=BOTH, expand=True)
 
         home_screen["update"](state)
         player_screen["update"](state)
+        playlist_screen["update"](state)
         root.after(100, render)
 
     root.after(100, render)

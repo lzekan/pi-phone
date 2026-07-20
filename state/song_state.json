@@ -1,10 +1,17 @@
 {
-    "track_id": "5Hk4Mpex0s2ndUpDQ5v2rU",
-    "track": "Walk Of Life - Remastered 1996",
-    "artist": "Dire Straits",
-    "progress_ms": 19108,
-    "duration_ms": 248893,
+    "track_id": "3MaPuudm3WevEmzdoNxEE1",
+    "track": "cash legale",
+    "artist": "Caldo",
+    "progress_ms": 37576,
+    "duration_ms": 139333,
     "is_playing": true,
-    "image_url": "https://i.scdn.co/image/ab67616d0000b27358c4e9c84ece7d31f51636f3",
-    "next_song": null
+    "image_url": "https://i.scdn.co/image/ab67616d0000b27327388f7ff59f22ac0493df0f",
+    "next_song": {
+        "track_id": "4qFrGuly7KCl3WMmGuECFC",
+        "track": "CLAP CLAP (feat. Artie 5ive, Niky Savage)",
+        "artist": "Sadturs",
+        "uri": "spotify:track:4qFrGuly7KCl3WMmGuECFC",
+        "duration_ms": 133874,
+        "image_url": "https://i.scdn.co/image/ab67616d0000b273549e124eb036aa1c469c1dbb"
+    }
 }
