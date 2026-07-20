@@ -14,7 +14,7 @@ pending_track_change = False
 track_before_change = None
 track_change_start = 0
 
-TRACK_CHANGE_TIMEOUT = 3
+TRACK_CHANGE_TIMEOUT = 8
 TRACK_CHANGE_SETTLE_TIME = 0.35
 
 

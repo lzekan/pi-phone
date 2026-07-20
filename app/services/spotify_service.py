@@ -104,25 +104,6 @@ def seek(position_ms):
     )
     response.raise_for_status()
 
-def get_recently_played():
-    token = _get_token()
-
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-
-    r = requests.get(
-        "https://api.spotify.com/v1/me/player/recently-played?limit=10",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT
-    )
-    r.raise_for_status()
-
-    if r.status_code == 200:
-        return r.json().get("items", [])
-
-    return []
-
 def play_track(uri):
     token = _get_token()
 
@@ -157,25 +138,6 @@ def get_user_playlists():
 
     return []
 
-def get_me():
-    token = _get_token()
-
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }   
-
-    r = requests.get(
-        "https://api.spotify.com/v1/me",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT
-    )
-    r.raise_for_status()
-
-    if r.status_code == 200:
-        return r.json()
-
-    return None
-
 def get_playlist_tracks(playlist_uri):
     token = _get_token()
     headers = {
@@ -196,3 +158,22 @@ def get_playlist_tracks(playlist_uri):
         url = data.get("next")
 
     return tracks
+
+def get_me():
+    token = _get_token()
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }   
+
+    r = requests.get(
+        "https://api.spotify.com/v1/me",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT
+    )
+    r.raise_for_status()
+
+    if r.status_code == 200:
+        return r.json()
+
+    return None
