@@ -1,17 +1,24 @@
 [
     {
-        "track_id": "4bDPr2VAjcfgUDmN9dGOC3",
-        "name": "Why I Love You",
-        "artist": "JAŸ-Z",
-        "uri": "spotify:track:4bDPr2VAjcfgUDmN9dGOC3",
-        "image_url": "https://i.scdn.co/image/ab67616d0000b27352e61456aa4995ba48d94e30"
+        "track_id": "5Hk4Mpex0s2ndUpDQ5v2rU",
+        "name": "Walk Of Life - Remastered 1996",
+        "artist": "Dire Straits",
+        "uri": "spotify:track:5Hk4Mpex0s2ndUpDQ5v2rU",
+        "image_url": "https://i.scdn.co/image/ab67616d0000b27358c4e9c84ece7d31f51636f3"
     },
     {
-        "track_id": "6LxSe8YmdPxy095Ux6znaQ",
-        "name": "Headlines",
-        "artist": "Drake",
-        "uri": "spotify:track:6LxSe8YmdPxy095Ux6znaQ",
-        "image_url": "https://i.scdn.co/image/ab67616d0000b273c7ea04a9b455e3f68ef82550"
+        "track_id": "4iz9lGMjU1lXS51oPmUmTe",
+        "name": "Homecoming",
+        "artist": "Kanye West",
+        "uri": "spotify:track:4iz9lGMjU1lXS51oPmUmTe",
+        "image_url": "https://i.scdn.co/image/ab67616d0000b27326f7f19c7f0381e56156c94a"
+    },
+    {
+        "track_id": "0mEdbdeRFQwBhN4xfyIeUM",
+        "name": "Can't Tell Me Nothing",
+        "artist": "Kanye West",
+        "uri": "spotify:track:0mEdbdeRFQwBhN4xfyIeUM",
+        "image_url": "https://i.scdn.co/image/ab67616d0000b27326f7f19c7f0381e56156c94a"
     },
     {
         "track_id": "5e5MKPtJuFb8NaeSEyV5gD",
@@ -21,52 +28,10 @@
         "image_url": "https://i.scdn.co/image/ab67616d0000b273346d77e155d854735410ed18"
     },
     {
-        "track_id": "4vUFIQI2MAooyVxoifBCcQ",
-        "name": "Sunčan dan",
-        "artist": "Neno Belan",
-        "uri": "spotify:track:4vUFIQI2MAooyVxoifBCcQ",
-        "image_url": "https://i.scdn.co/image/ab67616d0000b273728481174e9267671c94b167"
-    },
-    {
-        "track_id": "5980rUQH7tLVv78lk4EIDU",
-        "name": "Just The Way You Are - David Guetta Remix",
-        "artist": "Milky",
-        "uri": "spotify:track:5980rUQH7tLVv78lk4EIDU",
-        "image_url": "https://i.scdn.co/image/ab67616d0000b2737529b84e39ea69061def83d4"
-    },
-    {
-        "track_id": "2qwn6whaZf7gax7SaqUZSC",
-        "name": "Incredible",
-        "artist": "Future",
-        "uri": "spotify:track:2qwn6whaZf7gax7SaqUZSC",
-        "image_url": "https://i.scdn.co/image/ab67616d0000b2737567ec7d3c07783e4f2111e0"
-    },
-    {
-        "track_id": "6twB0uYXJYW9t5GHfYaQ3i",
-        "name": "ten",
-        "artist": "Fred again..",
-        "uri": "spotify:track:6twB0uYXJYW9t5GHfYaQ3i",
-        "image_url": "https://i.scdn.co/image/ab67616d0000b2739574df129a4a2f4fa4990286"
-    },
-    {
-        "track_id": "5Hk4Mpex0s2ndUpDQ5v2rU",
-        "name": "Walk Of Life - Remastered 1996",
-        "artist": "Dire Straits",
-        "uri": "spotify:track:5Hk4Mpex0s2ndUpDQ5v2rU",
-        "image_url": "https://i.scdn.co/image/ab67616d0000b27358c4e9c84ece7d31f51636f3"
-    },
-    {
-        "track_id": "10WRA3nYXkG0M7uKOzr4Ur",
-        "name": "ROXTAR",
-        "artist": "BUNTAI",
-        "uri": "spotify:track:10WRA3nYXkG0M7uKOzr4Ur",
-        "image_url": "https://i.scdn.co/image/ab67616d0000b273ddce86b1659784797b112058"
-    },
-    {
-        "track_id": "1FWgISXNa2ZSZ8Ls1o7Jfr",
-        "name": "Suncobran",
-        "artist": "Miki Solus",
-        "uri": "spotify:track:1FWgISXNa2ZSZ8Ls1o7Jfr",
-        "image_url": "https://i.scdn.co/image/ab67616d0000b273d96d28da037fd13b57de3c13"
+        "track_id": "6LxSe8YmdPxy095Ux6znaQ",
+        "name": "Headlines",
+        "artist": "Drake",
+        "uri": "spotify:track:6LxSe8YmdPxy095Ux6znaQ",
+        "image_url": "https://i.scdn.co/image/ab67616d0000b273c7ea04a9b455e3f68ef82550"
     }
 ]

@@ -57,7 +57,9 @@ def render_home(root, state, button_style):
     playlist_box.pack(fill=X)
     playlist_box.pack_propagate(False)
     playlist_canvas = Canvas(playlist_box, bg="#111111", highlightthickness=0)
-    playlist_scroll = Scrollbar(playlist_box, orient=HORIZONTAL, command=playlist_canvas.xview)
+    playlist_scroll = Scrollbar(
+        playlist_box, orient=HORIZONTAL, command=playlist_canvas.xview, width=24
+    )
     playlist_list = Frame(playlist_canvas, bg="#111111")
     playlist_window = playlist_canvas.create_window((0, 0), window=playlist_list, anchor="nw")
     playlist_canvas.configure(xscrollcommand=playlist_scroll.set)
@@ -74,6 +76,32 @@ def render_home(root, state, button_style):
     )
     playlist_canvas.bind("<Button-4>", lambda _event: playlist_canvas.xview_scroll(-1, "units"))
     playlist_canvas.bind("<Button-5>", lambda _event: playlist_canvas.xview_scroll(1, "units"))
+
+    playlist_drag_start_x = 0
+    playlist_dragged = False
+
+    def playlist_canvas_x(event):
+        return event.x_root - playlist_canvas.winfo_rootx()
+
+    def start_playlist_drag(event):
+        nonlocal playlist_drag_start_x, playlist_dragged
+        playlist_drag_start_x = event.x_root
+        playlist_dragged = False
+        playlist_canvas.scan_mark(playlist_canvas_x(event), 0)
+
+    def drag_playlist(event):
+        nonlocal playlist_dragged
+        if abs(event.x_root - playlist_drag_start_x) > 5:
+            playlist_dragged = True
+        playlist_canvas.scan_dragto(playlist_canvas_x(event), 0, gain=1)
+
+    def finish_playlist_press(_event, playlist_uri, playlist_name):
+        if not playlist_dragged:
+            print_playlist_tracks(playlist_uri, playlist_name)
+
+    for widget in (playlist_canvas, playlist_list):
+        widget.bind("<ButtonPress-1>", start_playlist_drag)
+        widget.bind("<B1-Motion>", drag_playlist)
 
     mini_player = Frame(frame, bg="#181818", height=72, cursor="hand2")
     mini_player.pack_propagate(False)
@@ -209,10 +237,12 @@ def render_home(root, state, button_style):
             if expected_uri:
                 for widget in (card, cover_frame, cover, name_label):
                     widget.config(cursor="hand2")
+                    widget.bind("<ButtonPress-1>", start_playlist_drag)
+                    widget.bind("<B1-Motion>", drag_playlist)
                     widget.bind(
-                        "<Button-1>",
-                        lambda _event, uri=expected_uri, name=playlist.get("name", ""): (
-                            print_playlist_tracks(uri, name)
+                        "<ButtonRelease-1>",
+                        lambda event, uri=expected_uri, name=playlist.get("name", ""): (
+                            finish_playlist_press(event, uri, name)
                         ),
                     )
 
@@ -253,7 +283,7 @@ def render_home(root, state, button_style):
         song = current_state["song"]
         if song.get("track_id"):
             if not mini_player.winfo_manager():
-                mini_player.pack(fill=X, side=BOTTOM)
+                mini_player.pack(fill=X, side=BOTTOM, before=content)
         elif mini_player.winfo_manager():
             mini_player.pack_forget()
 
