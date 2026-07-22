@@ -13,8 +13,8 @@ SONG_STATE_FILE = "/home/lukaz/pi-phone/state/song_state.json"
 RECENT_TRACKS_FILE = "/home/lukaz/pi-phone/state/recent_tracks.json"
 PRELOAD_BEFORE_END_MS = 30000
 QUEUE_REFRESH_SECONDS = 5
-POLL_SECONDS = 2
-RECENT_TRACKS_LIMIT = 10
+POLL_SECONDS = 3
+RECENT_TRACKS_LIMIT = 5
 REQUEST_TIMEOUT = (3.05, 10)
 
 
@@ -45,7 +45,19 @@ def load_recent_tracks():
     try:
         with open(RECENT_TRACKS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return data[:RECENT_TRACKS_LIMIT] if isinstance(data, list) else []
+        if not isinstance(data, list):
+            return []
+
+        unique_tracks = []
+        seen_track_ids = set()
+        for track in data:
+            track_id = track.get("track_id")
+            if track_id in seen_track_ids:
+                continue
+            seen_track_ids.add(track_id)
+            unique_tracks.append(track)
+
+        return unique_tracks[:RECENT_TRACKS_LIMIT]
     except (FileNotFoundError, json.JSONDecodeError):
         return []
 
@@ -128,6 +140,7 @@ next_song = None
 last_queue_fetch = 0
 last_track_id = None
 recent_history = load_recent_tracks()
+save_recent_tracks(recent_history)
 
 
 while True:
@@ -172,10 +185,13 @@ while True:
                 last_queue_fetch = 0
 
                 recent_track = recent_track_payload(data["item"])
-                if not recent_history or recent_history[0].get("track_id") != track_id:
-                    recent_history.insert(0, recent_track)
-                    recent_history = recent_history[:RECENT_TRACKS_LIMIT]
-                    save_recent_tracks(recent_history)
+                recent_history = [
+                    track for track in recent_history
+                    if track.get("track_id") != track_id                    # uklanjanje duplikata iz Recently Played
+                ]
+                recent_history.insert(0, recent_track)
+                recent_history = recent_history[:RECENT_TRACKS_LIMIT]
+                save_recent_tracks(recent_history)
 
             remaining_ms = data["item"]["duration_ms"] - data["progress_ms"]
             now = time.time()

@@ -28,44 +28,6 @@ def load_home():
         state["home_loading"] = False
 
 
-def get_recent_tracks():
-    return get_state()["recent_tracks"]
-
-
-def get_users_playlists():
-    playlists = get_state()["playlists"]
-
-    for playlist in playlists:
-        playlist
-
-def get_playlist_tracks(playlist_uri):
-
-    try:
-        tracks = []
-        for item in spotify_service.get_playlist_tracks(playlist_uri) or []:
-
-            track = item.get("item") or item.get("track") or {}
-            images = track.get("album", {}).get("images") or []
-            tracks.append({
-                "name": track.get("name", ""),
-                "artist": ", ".join([artist.get("name", "") for artist in track.get("artists", [])]),
-                "uri": track.get("uri"),
-                "image_url": images[0]["url"] if images else None
-            })
-
-        return tracks
-    except Exception as error:
-        response = getattr(error, "response", None)
-        if response is not None and response.status_code == 403:
-            print(
-                "[PLAYLIST ERROR] Spotify only allows track access for "
-                "playlists you own or collaborate on."
-            )
-        else:
-            print(f"[SPOTIFY ERROR] {error}")
-        return None
-
-
 def get_user_profile():
     data = spotify_service.get_me()
 

@@ -108,7 +108,7 @@ def on_seek(position_ms):
     _run_async(lambda: spotify_service.seek(position_ms), rollback)
 
 
-def play_selected_track(uri):
+def play_selected_track(uri, context_uri=None):
     song_state = get_song_state()
     generation = _next_command_generation()
     song_state["progress_ms"] = 0
@@ -124,4 +124,4 @@ def play_selected_track(uri):
             daemon_client.pending_seek_position = None
             daemon_client.pending_play_state = None
 
-    _run_async(lambda: spotify_service.play_track(uri), rollback)
+    _run_async(lambda: spotify_service.play_track(uri, context_uri), rollback)

@@ -7,3 +7,6 @@ def go_player():
     state = get_state()
     if state["song"].get("track_id"):
         state["screen"] = "player"
+
+def go_playlist():
+    get_state()["screen"] = "playlist"
