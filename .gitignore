@@ -4,3 +4,4 @@ song_state.json
 recent_tracks.json
 __pycache__/
 *.pycstate/song_state.json
+state/recent_tracks.json
