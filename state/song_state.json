@@ -1,10 +1,17 @@
 {
-    "track_id": "6yi3BJB9taHiIl9mCyrMAk",
-    "track": "Grme Trube",
-    "artist": "Bane Mojicevic",
-    "progress_ms": 44730,
-    "duration_ms": 203866,
+    "track_id": "47BB4yzud1wuVnUGZRn87C",
+    "track": "Prvak Svijeta",
+    "artist": "Željko Bebek",
+    "progress_ms": 141862,
+    "duration_ms": 253520,
     "is_playing": true,
-    "image_url": "https://i.scdn.co/image/ab67616d0000b2737437336af6534c30057ca00f",
-    "next_song": null
+    "image_url": "https://i.scdn.co/image/ab67616d0000b273cc7e1eaaefb367f8905f394e",
+    "next_song": {
+        "track_id": "3mWLIkjL52Kk7zAIcf8uw1",
+        "track": "Sto Sam Dana Pio",
+        "artist": "Željko Bebek",
+        "uri": "spotify:track:3mWLIkjL52Kk7zAIcf8uw1",
+        "duration_ms": 229893,
+        "image_url": "https://i.scdn.co/image/ab67616d0000b2733b2f2fb787f39ea61f7b91f3"
+    }
 }
