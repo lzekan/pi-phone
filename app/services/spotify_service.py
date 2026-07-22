@@ -15,6 +15,8 @@ _token_lock = threading.Lock()
 
 id_me = None
 
+# ---------------- TOKEN -----------------
+
 def _get_token():
     global _access_token, _token_expires_at
 
@@ -44,6 +46,11 @@ def _get_token():
         _access_token = data["access_token"]
         _token_expires_at = time.time() + data.get("expires_in", 3600)
         return _access_token
+
+# ----------------------------------------------------
+
+
+# ----------------- SONG ACTIONS ---------------------
 
 def set_playing(should_play):
     token = _get_token()
@@ -127,6 +134,11 @@ def play_track(uri, context_uri=None):
     )
     response.raise_for_status()
 
+# ----------------------------------------------------
+
+# ----------- PLAYLIST ACTIONS -----------------------
+
+
 def get_user_playlists():
     token = _get_token()
 
@@ -165,7 +177,41 @@ def get_playlist_tracks(playlist_uri):
         tracks.extend(data.get("items", []))
         url = data.get("next")
 
-    return tracks
+    return tracks   
+
+
+# ----------------------------------------------------
+
+
+# ---------------- SEARCH ACTIONS --------------------
+
+def search_tracks(query):
+    token = _get_token()
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    response = requests.get(
+        "https://api.spotify.com/v1/search",
+        headers=headers,
+        params={
+            "q": query,
+            "type": "track",
+            "limit": 10
+        },
+        timeout=REQUEST_TIMEOUT
+    )
+
+    response.raise_for_status()
+
+    return response.json().get("tracks", {}).get("items", [])
+
+
+# ----------------------------------------------------
+
+
+
+# ------------------ USER PROFILE ACTIONS ------------
 
 def get_me():
     token = _get_token()
@@ -185,3 +231,5 @@ def get_me():
         return r.json()
 
     return None
+
+# ----------------------------------------------------

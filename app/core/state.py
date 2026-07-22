@@ -19,6 +19,10 @@ _state = {
     "current_playlist_uri": None,
     "current_playlist_name": None,
     "current_playlist_tracks": None,
+    "search_query": "",
+    "search_results": [],
+    "search_loading": False,
+    "search_error": None
 }
 
 

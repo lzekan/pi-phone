@@ -85,9 +85,37 @@ def render_player(root, state, button_style):
     progress_time = Label(frame, fg="gray", bg="black", font=("Arial", 10))
     progress = ttk.Progressbar(frame, orient="horizontal", length=300, mode="determinate")
     controls = Frame(frame, bg="black")
-    prev_button = Button(controls, text="<<", command=on_prev, width=4, **button_style)
-    play_button = Button(controls, text="||", command=on_toggle_play, width=4, **button_style)
-    next_button = Button(controls, text=">>", command=on_next, width=4, **button_style)
+    prev_button = Button(controls, text="<<", width=4, **button_style)
+    play_button = Button(controls, text="||", width=4, **button_style)
+    next_button = Button(controls, text=">>", width=4, **button_style)
+
+    control_bg = button_style.get("bg", "#222222")
+    control_active_bg = button_style.get("activebackground", "#444444")
+
+    def run_control(button, action):
+        button.config(bg=control_active_bg, activebackground=control_active_bg)
+        try:
+            action()
+        finally:
+            def release_control():
+                button.config(bg=control_bg, activebackground=control_bg)
+                frame.focus_set()
+
+            button.after(80, release_control)
+
+    for button, action in (
+        (prev_button, on_prev),
+        (play_button, on_toggle_play),
+        (next_button, on_next),
+    ):
+        button.config(
+            command=lambda current_button=button, current_action=action: run_control(
+                current_button,
+                current_action,
+            ),
+            takefocus=False,
+            activebackground=control_bg,
+        )
 
     cover_frame.pack(pady=10)
     cover_label.pack(fill=BOTH, expand=True)

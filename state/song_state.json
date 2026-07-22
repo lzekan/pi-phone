@@ -1,17 +1,17 @@
 {
-    "track_id": "7c6tStwV6c6e8RLLGLKp1y",
-    "track": "Sargiju Mi Razbile Barabe",
-    "artist": "Izvorni Dar Braca Pejinovic",
-    "progress_ms": 116826,
-    "duration_ms": 222824,
+    "track_id": "0Ul2LjDp9S7Q329eLEwSun",
+    "track": "Kaldrma",
+    "artist": "Željko Bebek",
+    "progress_ms": 12758,
+    "duration_ms": 250852,
     "is_playing": true,
-    "image_url": "https://i.scdn.co/image/ab67616d0000b27371ee89c74fd76f8706c0f81e",
+    "image_url": "https://i.scdn.co/image/ab67616d0000b273d4b9bc25e08fd3d5d091a6ca",
     "next_song": {
-        "track_id": "36wxwc6UadODIbN0JFKCer",
-        "track": "Ti si mala za sargiju znala",
-        "artist": "Mirsada i Jarani",
-        "uri": "spotify:track:36wxwc6UadODIbN0JFKCer",
-        "duration_ms": 290468,
-        "image_url": "https://i.scdn.co/image/ab67616d0000b27338fd05b952d81d22644ca830"
+        "track_id": "47BB4yzud1wuVnUGZRn87C",
+        "track": "Prvak Svijeta",
+        "artist": "Željko Bebek",
+        "uri": "spotify:track:47BB4yzud1wuVnUGZRn87C",
+        "duration_ms": 253520,
+        "image_url": "https://i.scdn.co/image/ab67616d0000b273cc7e1eaaefb367f8905f394e"
     }
 }
