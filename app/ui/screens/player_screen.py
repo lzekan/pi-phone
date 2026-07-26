@@ -1,4 +1,5 @@
 import time
+from threading import Thread
 from tkinter import BOTH, LEFT, NORMAL, X
 from tkinter import Button, Frame, Label
 from tkinter import ttk
@@ -6,6 +7,7 @@ from tkinter import ttk
 from app.controller.controller_navigation import go_home
 from app.controller.controller_player import on_next, on_prev, on_seek, on_toggle_play
 from app.core.state import get_state
+from app.services import audio_output_service
 from app.services.image_cache import get_photo_async
 
 
@@ -127,6 +129,134 @@ def render_player(root, state, button_style):
     prev_button.pack(side=LEFT, padx=5)
     play_button.pack(side=LEFT, padx=5)
     next_button.pack(side=LEFT, padx=5)
+
+    output_panel = Frame(frame, bg="#111111")
+    output_results = Frame(output_panel, bg="#111111")
+    output_results.pack(fill=X, pady=(0, 4))
+    output_button = Button(
+        output_panel,
+        text="Output",
+        fg="white",
+        bg="#222222",
+        activeforeground="white",
+        activebackground="#222222",
+        font=("DejaVu Sans", 9, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        padx=8,
+        pady=5,
+    )
+    output_button.pack(anchor="w")
+    output_panel.place(x=10, rely=1, y=-10, anchor="sw")
+
+    def clear_output_results():
+        for child in output_results.winfo_children():
+            child.destroy()
+
+    def close_output_results():
+        clear_output_results()
+        output_button.config(state=NORMAL)
+
+    def show_output_devices(devices):
+        clear_output_results()
+        output_button.config(state=NORMAL)
+
+        if not devices:
+            Label(
+                output_results,
+                text="No audio outputs",
+                fg="#AAAAAA",
+                bg="#111111",
+                anchor="w",
+                font=("DejaVu Sans", 8),
+            ).pack(fill=X)
+            return
+
+        for device in devices:
+            device_type = "Bluetooth" if device["type"] == "bluetooth" else "3.5 mm"
+            active_marker = "✓ " if device["active"] else ""
+            Button(
+                output_results,
+                text=f'{active_marker}{device["name"]}\n{device_type}',
+                fg="white",
+                bg="#1DB954" if device["active"] else "#222222",
+                activeforeground="white",
+                activebackground="#169C46" if device["active"] else "#333333",
+                anchor="w",
+                justify=LEFT,
+                font=("DejaVu Sans", 9, "bold"),
+                relief="flat",
+                borderwidth=0,
+                highlightthickness=0,
+                takefocus=False,
+                padx=8,
+                pady=5,
+                command=lambda selected=device: select_output_device(selected),
+            ).pack(fill=X)
+
+    def show_output_error(message):
+        clear_output_results()
+        output_button.config(state=NORMAL)
+        Label(
+            output_results,
+            text=f"Output error:\n{message}",
+            fg="#FF6B6B",
+            bg="#111111",
+            anchor="w",
+            justify=LEFT,
+            font=("DejaVu Sans", 8),
+        ).pack(fill=X)
+
+    def show_output_loading(message):
+        clear_output_results()
+        output_button.config(state="disabled")
+        Label(
+            output_results,
+            text=message,
+            fg="#AAAAAA",
+            bg="#111111",
+            anchor="w",
+            font=("DejaVu Sans", 8),
+        ).pack(fill=X)
+
+    def load_output_devices():
+        show_output_loading("Loading...")
+
+        def worker():
+            try:
+                devices = audio_output_service.get_output_devices()
+                root.after(0, lambda: show_output_devices(devices))
+            except Exception as error:
+                message = str(error)
+                root.after(0, lambda: show_output_error(message))
+
+        Thread(target=worker, daemon=True).start()
+
+    def select_output_device(device):
+        if device["active"]:
+            return
+
+        show_output_loading(f'Switching to\n{device["name"]}...')
+
+        def worker():
+            try:
+                audio_output_service.set_output_device(device["id"])
+                root.after(0, close_output_results)
+            except Exception as error:
+                message = str(error)
+                root.after(0, lambda: show_output_error(message))
+
+        Thread(target=worker, daemon=True).start()
+
+    def toggle_output_devices():
+        if output_results.winfo_children():
+            close_output_results()
+        else:
+            load_output_devices()
+
+    output_button.config(command=toggle_output_devices)
 
     player_cover_key = None
     preloaded_next_track_id = None
