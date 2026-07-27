@@ -31,6 +31,22 @@ def render_home(root, state, button_style):
         bg="black",
         font=("DejaVu Sans", 24, "bold"),
     ).pack(side=LEFT)
+    Button(
+        header,
+        text="X",
+        command=root.destroy,
+        fg="white",
+        bg="#2A2A2A",
+        activeforeground="white",
+        activebackground="#D64545",
+        font=("DejaVu Sans", 14, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        width=3,
+        pady=4,
+    ).pack(side=RIGHT)
     header.pack(fill=X, padx=12, pady=(12, 6))
 
     search_box = Frame(
