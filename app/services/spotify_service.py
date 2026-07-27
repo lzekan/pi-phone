@@ -3,6 +3,7 @@ import os
 import json
 import threading
 import time
+import subprocess
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
@@ -57,30 +58,38 @@ def get_device_id():
     token = _get_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    for attempt in range(DEVICE_DISCOVERY_ATTEMPTS):
-        response = requests.get(
-            "https://api.spotify.com/v1/me/player/devices",
-            headers=headers,
-            timeout=REQUEST_TIMEOUT
-        )
-        response.raise_for_status()
+    for recovery_attempt in range(2):
+        for attempt in range(DEVICE_DISCOVERY_ATTEMPTS):
+            response = requests.get(
+                "https://api.spotify.com/v1/me/player/devices",
+                headers=headers,
+                timeout=REQUEST_TIMEOUT
+            )
+            response.raise_for_status()
 
-        devices = response.json().get("devices", [])
+            devices = response.json().get("devices", [])
 
-        for device in devices:
-            if device.get("name") == SPOTIFY_DEVICE_NAME:
-                device_id = device.get("id")
+            for device in devices:
+                if device.get("name") == SPOTIFY_DEVICE_NAME:
+                    return device["id"]
 
-                if device_id:
-                    return device_id
-
-        if attempt < DEVICE_DISCOVERY_ATTEMPTS - 1:
             time.sleep(DEVICE_DISCOVERY_DELAY)
 
-    raise RuntimeError(
-        f"Spotify device '{SPOTIFY_DEVICE_NAME}' is not available"
-    )
+        if recovery_attempt == 0:
+            print("[WARN] PiPhone unavailable, restarting librespot")
 
+            subprocess.run(
+                [
+                    "systemctl",
+                    "--user",
+                    "restart",
+                    "piphone-spotify.service"
+                ],
+                timeout=10,
+                check=True
+            )    
+
+    return None
 # ----------------- SONG ACTIONS ---------------------
 
 def set_playing(should_play):

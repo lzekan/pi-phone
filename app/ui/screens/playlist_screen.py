@@ -27,7 +27,11 @@ def render_playlist(root, state, button_style):
     tracks_box = Frame(frame, bg="black")
     tracks_box.pack(fill=BOTH, expand=True)
     tracks_canvas = Canvas(tracks_box, bg="black", highlightthickness=0)
-    tracks_scroll = Scrollbar(tracks_box, command=tracks_canvas.yview, width=24)
+    tracks_scroll = Scrollbar(
+        tracks_box,
+        command=lambda *args: scroll_tracks(*args),
+        width=24,
+    )
     tracks_list = Frame(tracks_canvas, bg="black")
     tracks_window = tracks_canvas.create_window((0, 0), window=tracks_list, anchor="nw")
     tracks_canvas.configure(yscrollcommand=tracks_scroll.set)
@@ -42,13 +46,62 @@ def render_playlist(root, state, button_style):
         "<Configure>",
         lambda event: tracks_canvas.itemconfigure(tracks_window, width=event.width),
     )
-    tracks_canvas.bind("<Button-4>", lambda _event: tracks_canvas.yview_scroll(-1, "units"))
-    tracks_canvas.bind("<Button-5>", lambda _event: tracks_canvas.yview_scroll(1, "units"))
-
     loaded_playlist_uri = None
     tracks_signature = None
+    cover_rows = []
     drag_start_y = 0
     tracks_dragged = False
+
+    def load_visible_covers():
+        if not tracks_canvas.winfo_exists():
+            return
+
+        visible_top = tracks_canvas.canvasy(0)
+        visible_bottom = visible_top + tracks_canvas.winfo_height()
+
+        for row in cover_rows:
+            if row["requested"] or not row["frame"].winfo_exists():
+                continue
+
+            row_top = row["frame"].winfo_y()
+            row_bottom = row_top + row["frame"].winfo_height()
+            if row_bottom < visible_top or row_top > visible_bottom:
+                continue
+
+            row["requested"] = True
+
+            def show_cover(
+                photo,
+                label=row["label"],
+                expected_playlist_uri=row["playlist_uri"],
+            ):
+                if (
+                    get_state().get("current_playlist_uri") != expected_playlist_uri
+                    or not label.winfo_exists()
+                ):
+                    return
+                label.config(image=photo if photo is not None else "")
+                label.image = photo
+
+            get_photo_async(root, row["image_url"], (56, 56), show_cover)
+
+    def schedule_visible_covers():
+        root.after_idle(load_visible_covers)
+
+    def scroll_tracks(*args):
+        tracks_canvas.yview(*args)
+        schedule_visible_covers()
+
+    tracks_canvas.bind(
+        "<Button-4>",
+        lambda _event: scroll_tracks("scroll", -1, "units"),
+    )
+    tracks_canvas.bind(
+        "<Button-5>",
+        lambda _event: scroll_tracks("scroll", 1, "units"),
+    )
+    tracks_canvas.bind("<Configure>", lambda _event: schedule_visible_covers(), add="+")
+    frame.bind("<Map>", lambda _event: schedule_visible_covers(), add="+")
 
     def tracks_canvas_y(event):
         return event.y_root - tracks_canvas.winfo_rooty()
@@ -64,6 +117,7 @@ def render_playlist(root, state, button_style):
         if abs(event.y_root - drag_start_y) > 5:
             tracks_dragged = True
         tracks_canvas.scan_dragto(0, tracks_canvas_y(event), gain=1)
+        schedule_visible_covers()
 
     def finish_track_press(_event, track_uri, playlist_uri):
         if not tracks_dragged and track_uri:
@@ -74,7 +128,7 @@ def render_playlist(root, state, button_style):
         widget.bind("<B1-Motion>", drag_tracks)
 
     def rebuild_tracks(current_state):
-        nonlocal tracks_signature
+        nonlocal tracks_signature, cover_rows
 
         tracks = current_state.get("current_playlist_tracks")
         new_signature = (
@@ -94,6 +148,7 @@ def render_playlist(root, state, button_style):
             return
 
         tracks_signature = new_signature
+        cover_rows = []
         for widget in tracks_list.winfo_children():
             widget.destroy()
 
@@ -182,16 +237,15 @@ def render_playlist(root, state, button_style):
                     ),
                 )
 
-            def show_cover(photo, label=image_label, expected_playlist_uri=playlist_uri):
-                if (
-                    get_state().get("current_playlist_uri") != expected_playlist_uri
-                    or not label.winfo_exists()
-                ):
-                    return
-                label.config(image=photo if photo is not None else "")
-                label.image = photo
+            cover_rows.append({
+                "frame": track_frame,
+                "label": image_label,
+                "image_url": track.get("image_url"),
+                "playlist_uri": playlist_uri,
+                "requested": False,
+            })
 
-            get_photo_async(root, track.get("image_url"), (56, 56), show_cover)
+        schedule_visible_covers()
 
     def update(current_state):
         nonlocal loaded_playlist_uri, tracks_signature
