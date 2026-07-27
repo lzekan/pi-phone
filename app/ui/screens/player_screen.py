@@ -1,15 +1,28 @@
+import math
 import time
 from threading import Thread
-from tkinter import BOTH, LEFT, NORMAL, X
-from tkinter import Button, Frame, Label
+from tkinter import BOTH, LEFT, NORMAL, RIGHT, X
+from tkinter import Button, Canvas, Frame, Label
 from tkinter import ttk
 
 from app.controller.controller_navigation import go_home
 from app.controller.controller_player import on_next, on_prev, on_seek, on_toggle_play
+from app.controller.controller_volume import on_volume_down, on_volume_up
 from app.core.state import get_state
 from app.services import audio_output_service
 from app.services.image_cache import get_photo_async
 
+
+WHEEL_SIZE = 350
+WHEEL_MARGIN = 14
+WHEEL_RADIUS = (WHEEL_SIZE - WHEEL_MARGIN * 2) / 2
+WHEEL_CENTER_RADIUS = 72
+WHEEL_COLOR = "#242424"
+WHEEL_ACTIVE_COLOR = "#1DB954"
+WHEEL_CENTER_COLOR = "#1DB954"
+WHEEL_CENTER_ACTIVE_COLOR = "#169C46"
+WHEEL_OUTLINE_COLOR = "#3A3A3A"
+WHEEL_TEXT_COLOR = "#FFFFFF"
 
 last_progress = 0
 last_update_time = 0
@@ -50,14 +63,9 @@ def _get_progress_ms(song, now):
     return min(max(0, progress_ms), duration)
 
 
-def _get_progress_min_sec(song, now):
-    progress_ms = _get_progress_ms(song, now)
-    return f"{int(progress_ms / 60000)}:{int((progress_ms % 60000) / 1000):02d}"
-
-
-def _get_duration_min_sec(song):
-    duration_ms = song.get("duration_ms", 0)
-    return f"{int(duration_ms / 60000)}:{int((duration_ms % 60000) / 1000):02d}"
+def _format_time(milliseconds):
+    milliseconds = max(0, int(milliseconds or 0))
+    return f"{milliseconds // 60000}:{(milliseconds % 60000) // 1000:02d}"
 
 
 def _seek_position_ms(x, width, duration_ms):
@@ -68,78 +76,32 @@ def _seek_position_ms(x, width, duration_ms):
 
 def render_player(root, state, button_style):
     frame = Frame(root, bg="black")
-    header = Frame(frame, bg="black")
-    Button(header, text="Home", command=go_home, **button_style).pack(side=LEFT)
+
+    header = Frame(frame, bg="black", height=52)
+    header.pack(fill=X, padx=10, pady=(8, 0))
+    Button(
+        header,
+        text="Home",
+        command=go_home,
+        takefocus=False,
+        **button_style,
+    ).pack(side=LEFT)
     Label(
         header,
-        text="Now playing",
+        text="Now Playing",
         fg="white",
         bg="black",
         font=("DejaVu Sans", 18, "bold"),
     ).pack(side=LEFT, padx=14)
-    header.pack(fill=X, padx=10, pady=(10, 0))
 
-    cover_frame = Frame(frame, width=300, height=300, bg="black")
-    cover_frame.pack_propagate(False)
-    cover_label = Label(cover_frame, bg="black", borderwidth=0, highlightthickness=0)
-    track_label = Label(frame, fg="white", bg="black", font=("Arial", 20))
-    artist_label = Label(frame, fg="gray", bg="black", font=("Arial", 14))
-    progress_time = Label(frame, fg="gray", bg="black", font=("Arial", 10))
-    progress = ttk.Progressbar(frame, orient="horizontal", length=300, mode="determinate")
-    controls = Frame(frame, bg="black")
-    prev_button = Button(controls, text="<<", width=4, **button_style)
-    play_button = Button(controls, text="||", width=4, **button_style)
-    next_button = Button(controls, text=">>", width=4, **button_style)
-
-    control_bg = button_style.get("bg", "#222222")
-    control_active_bg = button_style.get("activebackground", "#444444")
-
-    def run_control(button, action):
-        button.config(bg=control_active_bg, activebackground=control_active_bg)
-        try:
-            action()
-        finally:
-            def release_control():
-                button.config(bg=control_bg, activebackground=control_bg)
-                frame.focus_set()
-
-            button.after(80, release_control)
-
-    for button, action in (
-        (prev_button, on_prev),
-        (play_button, on_toggle_play),
-        (next_button, on_next),
-    ):
-        button.config(
-            command=lambda current_button=button, current_action=action: run_control(
-                current_button,
-                current_action,
-            ),
-            takefocus=False,
-            activebackground=control_bg,
-        )
-
-    cover_frame.pack(pady=10)
-    cover_label.pack(fill=BOTH, expand=True)
-    track_label.pack(pady=10)
-    artist_label.pack(pady=5)
-    progress_time.pack(pady=5)
-    progress.pack(pady=20)
-    controls.pack(pady=10)
-    prev_button.pack(side=LEFT, padx=5)
-    play_button.pack(side=LEFT, padx=5)
-    next_button.pack(side=LEFT, padx=5)
-
-    output_panel = Frame(frame, bg="#111111")
-    output_results = Frame(output_panel, bg="#111111")
-    output_results.pack(fill=X, pady=(0, 4))
+    output_panel = Frame(header, bg="#111111")
     output_button = Button(
         output_panel,
         text="Output",
         fg="white",
         bg="#222222",
         activeforeground="white",
-        activebackground="#222222",
+        activebackground="#333333",
         font=("DejaVu Sans", 9, "bold"),
         relief="flat",
         borderwidth=0,
@@ -148,19 +110,250 @@ def render_player(root, state, button_style):
         padx=8,
         pady=5,
     )
-    output_button.pack(anchor="w")
-    output_panel.place(x=10, rely=1, y=-10, anchor="sw")
+    output_button.pack(fill=X)
+    output_panel.pack(side=RIGHT, anchor="ne")
+    output_results = Frame(frame, bg="#111111")
+
+    now_playing = Frame(frame, bg="#101010", height=210)
+    now_playing.pack(fill=X, padx=12, pady=(10, 8))
+    now_playing.pack_propagate(False)
+
+    cover_frame = Frame(now_playing, width=180, height=180, bg="black")
+    cover_frame.pack(side=LEFT, padx=(10, 12), pady=15)
+    cover_frame.pack_propagate(False)
+    cover_label = Label(
+        cover_frame,
+        bg="black",
+        borderwidth=0,
+        highlightthickness=0,
+    )
+    cover_label.pack(fill=BOTH, expand=True)
+
+    metadata = Frame(now_playing, bg="#101010")
+    metadata.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10), pady=18)
+    Label(
+        metadata,
+        text="NOW PLAYING",
+        fg="#1DB954",
+        bg="#101010",
+        anchor="w",
+        font=("DejaVu Sans", 10, "bold"),
+    ).pack(fill=X, pady=(4, 12))
+    track_label = Label(
+        metadata,
+        fg="white",
+        bg="#101010",
+        anchor="w",
+        justify=LEFT,
+        wraplength=235,
+        font=("DejaVu Sans", 18, "bold"),
+    )
+    track_label.pack(fill=X)
+    artist_label = Label(
+        metadata,
+        fg="#A7A7A7",
+        bg="#101010",
+        anchor="w",
+        justify=LEFT,
+        wraplength=235,
+        font=("DejaVu Sans", 13),
+    )
+    artist_label.pack(fill=X, pady=(10, 0))
+
+    progress_area = Frame(frame, bg="black")
+    progress_area.pack(fill=X, padx=22, pady=(0, 4))
+    progress_style = ttk.Style()
+    progress_style.configure(
+        "Player.Horizontal.TProgressbar",
+        troughcolor="#333333",
+        background="#1DB954",
+        bordercolor="#333333",
+        lightcolor="#1DB954",
+        darkcolor="#1DB954",
+        thickness=14,
+    )
+    progress = ttk.Progressbar(
+        progress_area,
+        orient="horizontal",
+        mode="determinate",
+        style="Player.Horizontal.TProgressbar",
+    )
+    progress.pack(fill=X)
+
+    time_row = Frame(progress_area, bg="black")
+    time_row.pack(fill=X, pady=(4, 0))
+    elapsed_label = Label(
+        time_row,
+        fg="#B3B3B3",
+        bg="black",
+        font=("DejaVu Sans", 10, "bold"),
+    )
+    elapsed_label.pack(side=LEFT)
+    remaining_label = Label(
+        time_row,
+        fg="#B3B3B3",
+        bg="black",
+        font=("DejaVu Sans", 10, "bold"),
+    )
+    remaining_label.pack(side=RIGHT)
+
+    wheel_holder = Frame(frame, bg="black")
+    wheel_holder.pack(fill=BOTH, expand=True)
+    wheel = Canvas(
+        wheel_holder,
+        width=WHEEL_SIZE,
+        height=WHEEL_SIZE,
+        bg="black",
+        highlightthickness=0,
+        borderwidth=0,
+    )
+    wheel.pack()
+
+    bounds = (
+        WHEEL_MARGIN,
+        WHEEL_MARGIN,
+        WHEEL_SIZE - WHEEL_MARGIN,
+        WHEEL_SIZE - WHEEL_MARGIN,
+    )
+    segment_items = {
+        "right": wheel.create_arc(
+            *bounds,
+            start=-45,
+            extent=90,
+            fill=WHEEL_COLOR,
+            outline=WHEEL_OUTLINE_COLOR,
+            width=2,
+        ),
+        "up": wheel.create_arc(
+            *bounds,
+            start=45,
+            extent=90,
+            fill=WHEEL_COLOR,
+            outline=WHEEL_OUTLINE_COLOR,
+            width=2,
+        ),
+        "left": wheel.create_arc(
+            *bounds,
+            start=135,
+            extent=90,
+            fill=WHEEL_COLOR,
+            outline=WHEEL_OUTLINE_COLOR,
+            width=2,
+        ),
+        "down": wheel.create_arc(
+            *bounds,
+            start=225,
+            extent=90,
+            fill=WHEEL_COLOR,
+            outline=WHEEL_OUTLINE_COLOR,
+            width=2,
+        ),
+    }
+
+    wheel.create_oval(
+        *bounds,
+        outline="#1DB954",
+        width=3,
+    )
+
+    center = WHEEL_SIZE / 2
+    center_item = wheel.create_oval(
+        center - WHEEL_CENTER_RADIUS,
+        center - WHEEL_CENTER_RADIUS,
+        center + WHEEL_CENTER_RADIUS,
+        center + WHEEL_CENTER_RADIUS,
+        fill=WHEEL_CENTER_COLOR,
+        outline="#1ED760",
+        width=3,
+    )
+    wheel.create_text(
+        center,
+        58,
+        text="+",
+        fill=WHEEL_TEXT_COLOR,
+        font=("DejaVu Sans", 25, "bold"),
+    )
+    wheel.create_text(
+        center,
+        WHEEL_SIZE - 58,
+        text="-",
+        fill=WHEEL_TEXT_COLOR,
+        font=("DejaVu Sans", 25, "bold"),
+    )
+    wheel.create_text(
+        60,
+        center,
+        text="<<",
+        fill=WHEEL_TEXT_COLOR,
+        font=("DejaVu Sans", 18, "bold"),
+    )
+    wheel.create_text(
+        WHEEL_SIZE - 60,
+        center,
+        text=">>",
+        fill=WHEEL_TEXT_COLOR,
+        font=("DejaVu Sans", 18, "bold"),
+    )
+    play_text = wheel.create_text(
+        center,
+        center,
+        text="||",
+        fill=WHEEL_TEXT_COLOR,
+        font=("DejaVu Sans", 24, "bold"),
+    )
+
+    def flash_wheel_control(control):
+        if control == "center":
+            wheel.itemconfig(center_item, fill=WHEEL_CENTER_ACTIVE_COLOR)
+            root.after(
+                100,
+                lambda: wheel.itemconfig(center_item, fill=WHEEL_CENTER_COLOR),
+            )
+            return
+
+        item = segment_items[control]
+        wheel.itemconfig(item, fill=WHEEL_ACTIVE_COLOR)
+        root.after(100, lambda: wheel.itemconfig(item, fill=WHEEL_COLOR))
+
+    def handle_wheel_press(event):
+        dx = event.x - center
+        dy = event.y - center
+        distance = math.hypot(dx, dy)
+
+        if distance <= WHEEL_CENTER_RADIUS:
+            control = "center"
+            action = on_toggle_play
+        elif distance > WHEEL_RADIUS:
+            return
+        elif abs(dx) > abs(dy):
+            control = "right" if dx > 0 else "left"
+            action = on_next if dx > 0 else on_prev
+        else:
+            control = "down" if dy > 0 else "up"
+            action = on_volume_down if dy > 0 else on_volume_up
+
+        flash_wheel_control(control)
+        action()
+        frame.focus_set()
+
+    wheel.bind("<Button-1>", handle_wheel_press)
 
     def clear_output_results():
         for child in output_results.winfo_children():
             child.destroy()
 
+    def open_output_results():
+        output_results.place(relx=1, x=-10, y=55, anchor="ne")
+        output_results.lift()
+
     def close_output_results():
         clear_output_results()
+        output_results.place_forget()
         output_button.config(state=NORMAL)
 
     def show_output_devices(devices):
         clear_output_results()
+        open_output_results()
         output_button.config(state=NORMAL)
 
         if not devices:
@@ -176,7 +369,7 @@ def render_player(root, state, button_style):
 
         for device in devices:
             device_type = "Bluetooth" if device["type"] == "bluetooth" else "3.5 mm"
-            active_marker = "✓ " if device["active"] else ""
+            active_marker = "* " if device["active"] else ""
             Button(
                 output_results,
                 text=f'{active_marker}{device["name"]}\n{device_type}',
@@ -198,6 +391,7 @@ def render_player(root, state, button_style):
 
     def show_output_error(message):
         clear_output_results()
+        open_output_results()
         output_button.config(state=NORMAL)
         Label(
             output_results,
@@ -211,6 +405,7 @@ def render_player(root, state, button_style):
 
     def show_output_loading(message):
         clear_output_results()
+        open_output_results()
         output_button.config(state="disabled")
         Label(
             output_results,
@@ -266,8 +461,14 @@ def render_player(root, state, button_style):
     def update_seek_preview(event):
         nonlocal seek_preview_ms
         duration = get_state()["song"].get("duration_ms", 1)
-        seek_preview_ms = _seek_position_ms(event.x, progress.winfo_width(), duration)
+        seek_preview_ms = _seek_position_ms(
+            event.x,
+            progress.winfo_width(),
+            duration,
+        )
         progress["value"] = (seek_preview_ms / duration) * 100 if duration else 0
+        elapsed_label.config(text=_format_time(seek_preview_ms))
+        remaining_label.config(text=f"-{_format_time(duration - seek_preview_ms)}")
 
     def start_seek(event):
         nonlocal seeking
@@ -296,7 +497,7 @@ def render_player(root, state, button_style):
             cover_label.config(image=photo if photo is not None else "")
             cover_label.image = photo
 
-        get_photo_async(root, url, (300, 300), show_cover)
+        get_photo_async(root, url, (180, 180), show_cover)
 
     def restore_cover(_event=None):
         photo = getattr(cover_label, "image", None)
@@ -315,8 +516,18 @@ def render_player(root, state, button_style):
         if next_track_id != preloaded_next_track_id:
             preloaded_next_track_id = next_track_id
             if next_song:
-                get_photo_async(root, next_song.get("image_url"), (300, 300), lambda _photo: None)
-                get_photo_async(root, next_song.get("image_url"), (56, 56), lambda _photo: None)
+                get_photo_async(
+                    root,
+                    next_song.get("image_url"),
+                    (180, 180),
+                    lambda _photo: None,
+                )
+                get_photo_async(
+                    root,
+                    next_song.get("image_url"),
+                    (56, 56),
+                    lambda _photo: None,
+                )
 
         cover_key = (_get_track_id(song), song.get("image_url"))
         if cover_key != player_cover_key:
@@ -325,16 +536,18 @@ def render_player(root, state, button_style):
 
         track_label.config(text=song.get("track", ""))
         artist_label.config(text=song.get("artist", ""))
-        progress_time.config(
-            text=f"{_get_progress_min_sec(song, time.time())} / {_get_duration_min_sec(song)}"
+        wheel.itemconfig(
+            play_text,
+            text="||" if song.get("is_playing", False) else ">",
         )
-        play_button.config(text="||" if song.get("is_playing", False) else ">", state=NORMAL)
 
         now = time.time()
-        duration = song.get("duration_ms", 1)
+        duration = max(1, song.get("duration_ms", 1) or 1)
         progress_ms = _get_progress_ms(song, now)
         if not seeking:
-            progress["value"] = (progress_ms / duration) * 100 if duration else 0
+            progress["value"] = (progress_ms / duration) * 100
+            elapsed_label.config(text=_format_time(progress_ms))
+            remaining_label.config(text=f"-{_format_time(duration - progress_ms)}")
 
     update(state)
     return {"frame": frame, "update": update}

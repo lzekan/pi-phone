@@ -90,3 +90,16 @@ def get_output_devices():
 
 def set_output_device(device_id):
     _run(["wpctl", "set-default", str(int(device_id))])
+
+
+def change_volume(step_percent):
+    step = abs(int(step_percent))
+    direction = "+" if step_percent > 0 else "-"
+    _run([
+        "wpctl",
+        "set-volume",
+        "-l",
+        "1.0",
+        "@DEFAULT_AUDIO_SINK@",
+        f"{step}%{direction}",
+    ])
