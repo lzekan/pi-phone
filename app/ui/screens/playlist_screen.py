@@ -1,12 +1,20 @@
 from threading import Thread
-from tkinter import BOTH, LEFT, RIGHT, X, Y
+from tkinter import BOTH, BOTTOM, HORIZONTAL, LEFT, NORMAL, RIGHT, TOP, X, Y
 from tkinter import Button, Canvas, Frame, Label, Scrollbar
 
-from app.controller.controller_navigation import go_home
-from app.controller.controller_player import play_selected_track
+from app.controller.controller_navigation import go_home, go_player
+from app.controller.controller_player import play_selected_track, on_toggle_play
 from app.controller.controller_playlist import load_playlist
 from app.core.state import get_state
 from app.services.image_cache import get_photo_async
+
+def _get_track_id(song):
+    track_id = song.get("track_id")
+    if track_id:
+        return track_id
+    if song.get("track") or song.get("artist"):
+        return song.get("track"), song.get("artist"), song.get("duration_ms")
+    return None
 
 
 def render_playlist(root, state, button_style):
@@ -46,11 +54,38 @@ def render_playlist(root, state, button_style):
         "<Configure>",
         lambda event: tracks_canvas.itemconfigure(tracks_window, width=event.width),
     )
+
+    mini_player = Frame(frame, bg="#181818", height=72, cursor="hand2")
+    mini_player.pack_propagate(False)
+    mini_cover_frame = Frame(mini_player, width=56, height=56, bg="black")
+    mini_cover_frame.pack(side=LEFT, padx=8, pady=8)
+    mini_cover_frame.pack_propagate(False)
+    mini_cover = Label(mini_cover_frame, bg="black", borderwidth=0)
+    mini_cover.pack(fill=BOTH, expand=True)
+    mini_text = Frame(mini_player, bg="#181818")
+    mini_text.pack(side=LEFT, fill=BOTH, expand=True, pady=10)
+    mini_track = Label(
+        mini_text, fg="white", bg="#181818", anchor="w", font=("DejaVu Sans", 12, "bold")
+    )
+    mini_artist = Label(
+        mini_text, fg="#aaaaaa", bg="#181818", anchor="w", font=("DejaVu Sans", 10)
+    )
+    mini_track.pack(fill=X)
+    mini_artist.pack(fill=X)
+    mini_play = Button(
+        mini_player, text="||", command=on_toggle_play, width=3, **button_style
+    )
+    mini_play.pack(side=RIGHT, padx=8, pady=10)
+
+    for widget in (mini_player, mini_cover_frame, mini_cover, mini_text, mini_track, mini_artist):
+        widget.bind("<Button-1>", lambda _event: go_player())
+
     loaded_playlist_uri = None
     tracks_signature = None
     cover_rows = []
     drag_start_y = 0
     tracks_dragged = False
+    mini_cover_key = None
 
     def load_visible_covers():
         if not tracks_canvas.winfo_exists():
@@ -247,8 +282,30 @@ def render_playlist(root, state, button_style):
 
         schedule_visible_covers()
 
+    def set_mini_cover(cover_key, url):
+        mini_cover.config(image="")
+        mini_cover.image = None
+
+        def show_cover(photo):
+            current_song = get_state()["song"]
+            current_key = (_get_track_id(current_song), current_song.get("image_url"))
+            if current_key != cover_key:
+                return
+            mini_cover.config(image=photo if photo is not None else "")
+            mini_cover.image = photo
+
+        get_photo_async(root, url, (56, 56), show_cover)
+
+    def restore_cover(_event=None):
+        photo = getattr(mini_cover, "image", None)
+        if photo is not None:
+            mini_cover.config(image=photo)
+
+    root.bind("<Map>", restore_cover, add="+")
+    root.bind("<Configure>", restore_cover, add="+")
+
     def update(current_state):
-        nonlocal loaded_playlist_uri, tracks_signature
+        nonlocal loaded_playlist_uri, tracks_signature, mini_cover_key
 
         playlist_name_label.config(
             text=current_state.get("current_playlist_name") or ""
@@ -263,6 +320,22 @@ def render_playlist(root, state, button_style):
             Thread(target=load_playlist, daemon=True).start()
 
         rebuild_tracks(current_state)
+
+        song = current_state["song"]
+        if song.get("track_id"):
+            if not mini_player.winfo_manager():
+                mini_player.pack(fill=X, side=BOTTOM)
+        elif mini_player.winfo_manager():
+            mini_player.pack_forget()
+
+        cover_key = (_get_track_id(song), song.get("image_url"))
+        if cover_key != mini_cover_key:
+            mini_cover_key = cover_key
+            set_mini_cover(cover_key, song.get("image_url"))
+
+        mini_track.config(text=song.get("track", "") or "Nothing playing")
+        mini_artist.config(text=song.get("artist", ""))
+        mini_play.config(text="||" if song.get("is_playing", False) else ">", state=NORMAL)
 
     update(state)
     return {"frame": frame, "update": update}
