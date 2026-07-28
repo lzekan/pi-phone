@@ -12,6 +12,7 @@ _state = {
     },
     "next_song": None,
     "screen": "home",
+    "previous_screen": "home",
     "recent_tracks": [],
     "playlists": [],
     "albums": [],
@@ -36,5 +37,4 @@ def get_state():
 
 def get_song_state():
     return _state["song"]
-
 

@@ -5,7 +5,7 @@ from tkinter import BOTH, LEFT, NORMAL, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 from tkinter import ttk
 
-from app.controller.controller_navigation import go_home, go_playlist
+from app.controller.controller_navigation import go_back, go_playlist
 from app.controller.controller_player import on_next, on_prev, on_seek, on_toggle_play
 from app.controller.controller_volume import on_volume_down, on_volume_up
 from app.core.state import get_state
@@ -81,8 +81,8 @@ def render_player(root, state, button_style):
     header.pack(fill=X, padx=10, pady=(8, 0))
     Button(
         header,
-        text="Home",
-        command=go_home,
+        text="Back",
+        command=go_back,
         takefocus=False,
         **button_style,
     ).pack(side=LEFT)
