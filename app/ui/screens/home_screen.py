@@ -304,8 +304,9 @@ def render_home(root, state, button_style):
 
     def finish_playlist_press(_event, playlist_uri, playlist_name):
         if not playlist_dragged:
-            state["current_playlist_name"] = playlist_name
-            state["current_playlist_uri"] = playlist_uri
+            state["current_collection_name"] = playlist_name
+            state["current_collection_uri"] = playlist_uri
+            state["current_collection_type"] = "playlist"
             go_playlist()
 
     for widget in (playlist_canvas, playlist_list):

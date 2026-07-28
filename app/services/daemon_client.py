@@ -87,6 +87,8 @@ def start_sync(root):
             song_state["track_id"] = incoming_track_id
             song_state["track"] = file_state.get("track")
             song_state["artist"] = file_state.get("artist")
+            song_state["album_id"] = file_state.get("album_id")
+            song_state["album_name"] = file_state.get("album_name")
             song_state["duration_ms"] = file_state.get("duration_ms", 1)
             song_state["image_url"] = file_state.get("image_url")
 

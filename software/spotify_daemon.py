@@ -24,6 +24,8 @@ def track_payload(track):
         "track_id": track.get("id"),
         "track": track.get("name", ""),
         "artist": track.get("artists", [{}])[0].get("name", ""),
+        "album_id": track.get("album", {}).get("id"),
+        "album_name": track.get("album", {}).get("name", ""),
         "uri": track.get("uri"),
         "duration_ms": track.get("duration_ms", 1),
         "image_url": images[0]["url"] if images else None
@@ -36,6 +38,8 @@ def recent_track_payload(track):
         "track_id": payload["track_id"],
         "name": payload["track"],
         "artist": payload["artist"],
+        "album_id": payload["album_id"],
+        "album_name": payload["album_name"],
         "uri": payload["uri"],
         "image_url": payload["image_url"]
     }
@@ -74,6 +78,8 @@ def save_inactive_state():
         "track_id": None,
         "track": "",
         "artist": "",
+        "album_id": "",
+        "album_name": "",
         "progress_ms": 0,
         "duration_ms": 1,
         "is_playing": False,
@@ -215,6 +221,8 @@ while True:
                 "track_id": track_id,
                 "track": data["item"]["name"],
                 "artist": data["item"]["artists"][0]["name"],
+                "album_name": data["item"]["album"]["name"],
+                "album_id": data["item"]["album"]["id"],
                 "progress_ms": data["progress_ms"],
                 "duration_ms": data["item"]["duration_ms"],
                 "is_playing": data["is_playing"],

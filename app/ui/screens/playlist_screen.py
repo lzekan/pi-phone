@@ -4,7 +4,7 @@ from tkinter import Button, Canvas, Frame, Label, Scrollbar
 
 from app.controller.controller_navigation import go_home, go_player
 from app.controller.controller_player import play_selected_track, on_toggle_play
-from app.controller.controller_playlist import load_playlist
+from app.controller.controller_playlist import load_playlist, load_album
 from app.core.state import get_state
 from app.services.image_cache import get_photo_async
 
@@ -80,7 +80,7 @@ def render_playlist(root, state, button_style):
     for widget in (mini_player, mini_cover_frame, mini_cover, mini_text, mini_track, mini_artist):
         widget.bind("<Button-1>", lambda _event: go_player())
 
-    loaded_playlist_uri = None
+    loaded_collection_uri = None
     tracks_signature = None
     cover_rows = []
     drag_start_y = 0
@@ -111,7 +111,7 @@ def render_playlist(root, state, button_style):
                 expected_playlist_uri=row["playlist_uri"],
             ):
                 if (
-                    get_state().get("current_playlist_uri") != expected_playlist_uri
+                    get_state().get("current_collection_uri") != expected_playlist_uri
                     or not label.winfo_exists()
                 ):
                     return
@@ -165,10 +165,10 @@ def render_playlist(root, state, button_style):
     def rebuild_tracks(current_state):
         nonlocal tracks_signature, cover_rows
 
-        tracks = current_state.get("current_playlist_tracks")
+        tracks = current_state.get("current_collection_tracks")
         new_signature = (
-            current_state.get("current_playlist_uri"),
-            current_state.get("playlist_error"),
+            current_state.get("current_collection_uri"),
+            current_state.get("collection_error"),
             None if tracks is None else tuple(
                 (
                     track.get("uri"),
@@ -187,7 +187,7 @@ def render_playlist(root, state, button_style):
         for widget in tracks_list.winfo_children():
             widget.destroy()
 
-        error = current_state.get("playlist_error")
+        error = current_state.get("collection_error")
         if error:
             Label(
                 tracks_list,
@@ -219,7 +219,7 @@ def render_playlist(root, state, button_style):
             ).pack(fill=X, padx=12, pady=12)
             return
 
-        playlist_uri = current_state.get("current_playlist_uri")
+        collection_uri = current_state.get("current_collection_uri")
         for track in tracks:
             track_frame = Frame(tracks_list, bg="#181818", cursor="hand2")
             track_frame.pack(fill=X, padx=12, pady=3)
@@ -267,7 +267,7 @@ def render_playlist(root, state, button_style):
                 widget.bind("<B1-Motion>", drag_tracks)
                 widget.bind(
                     "<ButtonRelease-1>",
-                    lambda event, uri=track_uri, context=playlist_uri: (
+                    lambda event, uri=track_uri, context=collection_uri: (
                         finish_track_press(event, uri, context)
                     ),
                 )
@@ -276,7 +276,7 @@ def render_playlist(root, state, button_style):
                 "frame": track_frame,
                 "label": image_label,
                 "image_url": track.get("image_url"),
-                "playlist_uri": playlist_uri,
+                "playlist_uri": collection_uri,
                 "requested": False,
             })
 
@@ -305,19 +305,26 @@ def render_playlist(root, state, button_style):
     root.bind("<Configure>", restore_cover, add="+")
 
     def update(current_state):
-        nonlocal loaded_playlist_uri, tracks_signature, mini_cover_key
+        nonlocal loaded_collection_uri, tracks_signature, mini_cover_key
 
         playlist_name_label.config(
-            text=current_state.get("current_playlist_name") or ""
+            text=current_state.get("current_collection_name") or ""
         )
 
-        current_uri = current_state.get("current_playlist_uri")
-        if current_uri and current_uri != loaded_playlist_uri:
-            loaded_playlist_uri = current_uri
-            current_state["playlist_error"] = None
-            current_state["current_playlist_tracks"] = None
+        current_uri = current_state.get("current_collection_uri")
+        if current_uri and current_uri != loaded_collection_uri:
+            loaded_collection_uri = current_uri
+            current_state["collection_error"] = None
+            current_state["current_collection_tracks"] = None
             tracks_signature = None
-            Thread(target=load_playlist, daemon=True).start()
+
+            target = (
+                load_album
+                if current_state.get("current_collection_type") == "album"
+                else load_playlist
+            )
+
+            Thread(target=target, daemon=True).start()
 
         rebuild_tracks(current_state)
 

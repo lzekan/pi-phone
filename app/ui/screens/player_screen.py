@@ -5,7 +5,7 @@ from tkinter import BOTH, LEFT, NORMAL, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 from tkinter import ttk
 
-from app.controller.controller_navigation import go_home
+from app.controller.controller_navigation import go_home, go_playlist
 from app.controller.controller_player import on_next, on_prev, on_seek, on_toggle_play
 from app.controller.controller_volume import on_volume_down, on_volume_up
 from app.core.state import get_state
@@ -301,6 +301,27 @@ def render_player(root, state, button_style):
         fill=WHEEL_TEXT_COLOR,
         font=("DejaVu Sans", 24, "bold"),
     )
+
+    def open_current_album(_event=None):
+        state = get_state()
+        song = state["song"]
+        album_id = song.get("album_id")
+
+        if not album_id:
+            return
+
+        state["current_collection_type"] = "album"
+        state["current_collection_uri"] = f"spotify:album:{album_id}"
+        state["current_collection_name"] = song.get("album_name") or "Album"
+        state["current_collection_image_url"] = song.get("image_url")
+        state["current_collection_tracks"] = None
+        state["collection_error"] = None
+
+        go_playlist()
+
+    for widget in (cover_frame, cover_label):
+        widget.config(cursor="hand2")
+        widget.bind("<Button-1>", open_current_album)
 
     def flash_wheel_control(control):
         if control == "center":

@@ -10,3 +10,6 @@ def go_player():
 
 def go_playlist():
     get_state()["screen"] = "playlist"
+
+def go_launcher():
+    get_state()["screen"] = "launcher"

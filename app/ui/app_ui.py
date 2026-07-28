@@ -25,7 +25,6 @@ def start_ui(root):
     go_home()
     root.title("Pi Phone")
     root.attributes("-fullscreen", True)
-    root.bind("<Escape>", lambda _event: root.attributes("-fullscreen", False))
 
     home_screen = render_home(root, get_state(), BUTTON_STYLE)
     player_screen = render_player(root, get_state(), BUTTON_STYLE)
@@ -39,7 +38,7 @@ def start_ui(root):
         song = state["song"]
         screen = state.get("screen", "home")
 
-        if screen == "playlist" and not state.get("current_playlist_uri"):
+        if screen == "playlist" and not state.get("current_collection_uri"):
             state["screen"] = "home"
             screen = "home"
 
