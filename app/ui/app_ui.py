@@ -5,18 +5,21 @@ from app.core.state import get_state
 from app.ui.screens.home_screen import render_home
 from app.ui.screens.player_screen import render_player
 from app.ui.screens.playlist_screen import render_playlist
+from app.ui.theme import SURFACE_ALT, SURFACE_ACTIVE, TEXT, FONT
 
 
 BUTTON_STYLE = {
-    "font": ("DejaVu Sans", 16, "bold"),
-    "fg": "white",
-    "bg": "#222222",
-    "activeforeground": "white",
-    "activebackground": "#444444",
-    "disabledforeground": "white",
-    "relief": "raised",
-    "borderwidth": 2,
+    "font": (FONT, 12, "bold"),
+    "fg": TEXT,
+    "bg": SURFACE_ALT,
+    "activeforeground": TEXT,
+    "activebackground": SURFACE_ACTIVE,
+    "disabledforeground": TEXT,
+    "relief": "flat",
+    "borderwidth": 0,
     "highlightthickness": 0,
+    "padx": 12,
+    "pady": 7,
     "state": "normal",
 }
 

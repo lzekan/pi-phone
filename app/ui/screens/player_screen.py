@@ -11,18 +11,34 @@ from app.controller.controller_volume import on_volume_down, on_volume_up
 from app.core.state import get_state
 from app.services import audio_output_service
 from app.services.image_cache import get_photo_async
+from app.ui.theme import (
+    ACCENT,
+    ACCENT_ACTIVE,
+    BG,
+    CARD,
+    DANGER,
+    DIVIDER,
+    FONT,
+    PAGE_PAD,
+    SURFACE,
+    SURFACE_ACTIVE,
+    SURFACE_ALT,
+    TEXT,
+    TEXT_DIM,
+    TEXT_MUTED,
+)
 
 
-WHEEL_SIZE = 350
-WHEEL_MARGIN = 14
+WHEEL_SIZE = 344
+WHEEL_MARGIN = 12
 WHEEL_RADIUS = (WHEEL_SIZE - WHEEL_MARGIN * 2) / 2
 WHEEL_CENTER_RADIUS = 72
-WHEEL_COLOR = "#242424"
-WHEEL_ACTIVE_COLOR = "#1DB954"
-WHEEL_CENTER_COLOR = "#1DB954"
-WHEEL_CENTER_ACTIVE_COLOR = "#169C46"
-WHEEL_OUTLINE_COLOR = "#3A3A3A"
-WHEEL_TEXT_COLOR = "#FFFFFF"
+WHEEL_COLOR = SURFACE_ALT
+WHEEL_ACTIVE_COLOR = SURFACE_ACTIVE
+WHEEL_CENTER_COLOR = ACCENT
+WHEEL_CENTER_ACTIVE_COLOR = ACCENT_ACTIVE
+WHEEL_OUTLINE_COLOR = DIVIDER
+WHEEL_TEXT_COLOR = TEXT
 
 last_progress = 0
 last_update_time = 0
@@ -75,13 +91,13 @@ def _seek_position_ms(x, width, duration_ms):
 
 
 def render_player(root, state, button_style):
-    frame = Frame(root, bg="black")
+    frame = Frame(root, bg=BG)
 
-    header = Frame(frame, bg="black", height=52)
-    header.pack(fill=X, padx=10, pady=(8, 0))
+    header = Frame(frame, bg=BG, height=52)
+    header.pack(fill=X, padx=PAGE_PAD, pady=(10, 0))
     Button(
         header,
-        text="Back",
+        text="‹  Back",
         command=go_back,
         takefocus=False,
         **button_style,
@@ -89,20 +105,20 @@ def render_player(root, state, button_style):
     Label(
         header,
         text="Now Playing",
-        fg="white",
-        bg="black",
-        font=("DejaVu Sans", 18, "bold"),
+        fg=TEXT,
+        bg=BG,
+        font=(FONT, 18, "bold"),
     ).pack(side=LEFT, padx=14)
 
-    output_panel = Frame(header, bg="#111111")
+    output_panel = Frame(header, bg=BG)
     output_button = Button(
         output_panel,
         text="Output",
-        fg="white",
-        bg="#222222",
-        activeforeground="white",
-        activebackground="#333333",
-        font=("DejaVu Sans", 9, "bold"),
+        fg=TEXT,
+        bg=SURFACE_ALT,
+        activeforeground=TEXT,
+        activebackground=SURFACE_ACTIVE,
+        font=(FONT, 9, "bold"),
         relief="flat",
         borderwidth=0,
         highlightthickness=0,
@@ -112,65 +128,81 @@ def render_player(root, state, button_style):
     )
     output_button.pack(fill=X)
     output_panel.pack(side=RIGHT, anchor="ne")
-    output_results = Frame(frame, bg="#111111")
+    output_results = Frame(frame, bg=SURFACE)
 
-    now_playing = Frame(frame, bg="#101010", height=210)
-    now_playing.pack(fill=X, padx=12, pady=(10, 8))
+    now_playing = Frame(
+        frame,
+        bg=SURFACE,
+        height=214,
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
+    )
+    now_playing.pack(fill=X, padx=PAGE_PAD, pady=(10, 10))
     now_playing.pack_propagate(False)
 
-    cover_frame = Frame(now_playing, width=180, height=180, bg="black")
-    cover_frame.pack(side=LEFT, padx=(10, 12), pady=15)
+    cover_frame = Frame(now_playing, width=174, height=174, bg=SURFACE_ALT)
+    cover_frame.pack(side=LEFT, padx=(12, 14), pady=19)
     cover_frame.pack_propagate(False)
     cover_label = Label(
         cover_frame,
-        bg="black",
+        bg=SURFACE_ALT,
         borderwidth=0,
         highlightthickness=0,
     )
     cover_label.pack(fill=BOTH, expand=True)
 
-    metadata = Frame(now_playing, bg="#101010")
-    metadata.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10), pady=18)
+    metadata = Frame(now_playing, bg=SURFACE)
+    metadata.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10), pady=17)
     Label(
         metadata,
         text="NOW PLAYING",
-        fg="#1DB954",
-        bg="#101010",
+        fg=ACCENT,
+        bg=SURFACE,
         anchor="w",
-        font=("DejaVu Sans", 10, "bold"),
-    ).pack(fill=X, pady=(4, 12))
+        font=(FONT, 9, "bold"),
+    ).pack(fill=X, pady=(4, 10))
     track_label = Label(
         metadata,
-        fg="white",
-        bg="#101010",
+        fg=TEXT,
+        bg=SURFACE,
         anchor="w",
         justify=LEFT,
         wraplength=235,
-        font=("DejaVu Sans", 18, "bold"),
+        font=(FONT, 18, "bold"),
     )
     track_label.pack(fill=X)
     artist_label = Label(
         metadata,
-        fg="#A7A7A7",
-        bg="#101010",
+        fg=TEXT_MUTED,
+        bg=SURFACE,
         anchor="w",
         justify=LEFT,
         wraplength=235,
-        font=("DejaVu Sans", 13),
+        font=(FONT, 12),
     )
-    artist_label.pack(fill=X, pady=(10, 0))
+    artist_label.pack(fill=X, pady=(8, 0))
+    album_label = Label(
+        metadata,
+        fg=TEXT_DIM,
+        bg=SURFACE,
+        anchor="w",
+        justify=LEFT,
+        wraplength=235,
+        font=(FONT, 9),
+    )
+    album_label.pack(fill=X, pady=(5, 0))
 
-    progress_area = Frame(frame, bg="black")
+    progress_area = Frame(frame, bg=BG)
     progress_area.pack(fill=X, padx=22, pady=(0, 4))
     progress_style = ttk.Style()
     progress_style.configure(
         "Player.Horizontal.TProgressbar",
-        troughcolor="#333333",
-        background="#1DB954",
-        bordercolor="#333333",
-        lightcolor="#1DB954",
-        darkcolor="#1DB954",
-        thickness=14,
+        troughcolor=DIVIDER,
+        background=ACCENT,
+        bordercolor=DIVIDER,
+        lightcolor=ACCENT,
+        darkcolor=ACCENT,
+        thickness=7,
     )
     progress = ttk.Progressbar(
         progress_area,
@@ -180,30 +212,30 @@ def render_player(root, state, button_style):
     )
     progress.pack(fill=X)
 
-    time_row = Frame(progress_area, bg="black")
+    time_row = Frame(progress_area, bg=BG)
     time_row.pack(fill=X, pady=(4, 0))
     elapsed_label = Label(
         time_row,
-        fg="#B3B3B3",
-        bg="black",
-        font=("DejaVu Sans", 10, "bold"),
+        fg=TEXT_MUTED,
+        bg=BG,
+        font=(FONT, 9, "bold"),
     )
     elapsed_label.pack(side=LEFT)
     remaining_label = Label(
         time_row,
-        fg="#B3B3B3",
-        bg="black",
-        font=("DejaVu Sans", 10, "bold"),
+        fg=TEXT_MUTED,
+        bg=BG,
+        font=(FONT, 9, "bold"),
     )
     remaining_label.pack(side=RIGHT)
 
-    wheel_holder = Frame(frame, bg="black")
+    wheel_holder = Frame(frame, bg=BG)
     wheel_holder.pack(fill=BOTH, expand=True)
     wheel = Canvas(
         wheel_holder,
         width=WHEEL_SIZE,
         height=WHEEL_SIZE,
-        bg="black",
+        bg=BG,
         highlightthickness=0,
         borderwidth=0,
     )
@@ -252,8 +284,8 @@ def render_player(root, state, button_style):
 
     wheel.create_oval(
         *bounds,
-        outline="#1DB954",
-        width=3,
+        outline=DIVIDER,
+        width=2,
     )
 
     center = WHEEL_SIZE / 2
@@ -263,43 +295,43 @@ def render_player(root, state, button_style):
         center + WHEEL_CENTER_RADIUS,
         center + WHEEL_CENTER_RADIUS,
         fill=WHEEL_CENTER_COLOR,
-        outline="#1ED760",
-        width=3,
+        outline=ACCENT_ACTIVE,
+        width=2,
     )
     wheel.create_text(
         center,
         58,
-        text="+",
+        text="＋",
         fill=WHEEL_TEXT_COLOR,
-        font=("DejaVu Sans", 25, "bold"),
+        font=(FONT, 23, "bold"),
     )
     wheel.create_text(
         center,
         WHEEL_SIZE - 58,
-        text="-",
+        text="−",
         fill=WHEEL_TEXT_COLOR,
-        font=("DejaVu Sans", 25, "bold"),
+        font=(FONT, 23, "bold"),
     )
     wheel.create_text(
         60,
         center,
-        text="<<",
+        text="‹‹",
         fill=WHEEL_TEXT_COLOR,
-        font=("DejaVu Sans", 18, "bold"),
+        font=(FONT, 20, "bold"),
     )
     wheel.create_text(
         WHEEL_SIZE - 60,
         center,
-        text=">>",
+        text="››",
         fill=WHEEL_TEXT_COLOR,
-        font=("DejaVu Sans", 18, "bold"),
+        font=(FONT, 20, "bold"),
     )
     play_text = wheel.create_text(
         center,
         center,
-        text="||",
+        text="Ⅱ",
         fill=WHEEL_TEXT_COLOR,
-        font=("DejaVu Sans", 24, "bold"),
+        font=(FONT, 22, "bold"),
     )
 
     def open_current_album(_event=None):
@@ -379,10 +411,10 @@ def render_player(root, state, button_style):
             Label(
                 output_results,
                 text="No audio outputs",
-                fg="#AAAAAA",
-                bg="#111111",
+                fg=TEXT_MUTED,
+                bg=SURFACE,
                 anchor="w",
-                font=("DejaVu Sans", 8),
+                font=(FONT, 8),
             ).pack(fill=X)
             return
 
@@ -392,13 +424,13 @@ def render_player(root, state, button_style):
             Button(
                 output_results,
                 text=f'{active_marker}{device["name"]}\n{device_type}',
-                fg="white",
-                bg="#1DB954" if device["active"] else "#222222",
-                activeforeground="white",
-                activebackground="#169C46" if device["active"] else "#333333",
+                fg=TEXT,
+                bg=ACCENT if device["active"] else SURFACE_ALT,
+                activeforeground=TEXT,
+                activebackground=ACCENT_ACTIVE if device["active"] else SURFACE_ACTIVE,
                 anchor="w",
                 justify=LEFT,
-                font=("DejaVu Sans", 9, "bold"),
+                font=(FONT, 9, "bold"),
                 relief="flat",
                 borderwidth=0,
                 highlightthickness=0,
@@ -415,11 +447,11 @@ def render_player(root, state, button_style):
         Label(
             output_results,
             text=f"Output error:\n{message}",
-            fg="#FF6B6B",
-            bg="#111111",
+            fg=DANGER,
+            bg=SURFACE,
             anchor="w",
             justify=LEFT,
-            font=("DejaVu Sans", 8),
+            font=(FONT, 8),
         ).pack(fill=X)
 
     def show_output_loading(message):
@@ -429,10 +461,10 @@ def render_player(root, state, button_style):
         Label(
             output_results,
             text=message,
-            fg="#AAAAAA",
-            bg="#111111",
+            fg=TEXT_MUTED,
+            bg=SURFACE,
             anchor="w",
-            font=("DejaVu Sans", 8),
+            font=(FONT, 8),
         ).pack(fill=X)
 
     def load_output_devices():
@@ -516,7 +548,7 @@ def render_player(root, state, button_style):
             cover_label.config(image=photo if photo is not None else "")
             cover_label.image = photo
 
-        get_photo_async(root, url, (180, 180), show_cover)
+        get_photo_async(root, url, (174, 174), show_cover)
 
     def restore_cover(_event=None):
         photo = getattr(cover_label, "image", None)
@@ -538,7 +570,7 @@ def render_player(root, state, button_style):
                 get_photo_async(
                     root,
                     next_song.get("image_url"),
-                    (180, 180),
+                    (174, 174),
                     lambda _photo: None,
                 )
                 get_photo_async(
@@ -555,9 +587,10 @@ def render_player(root, state, button_style):
 
         track_label.config(text=song.get("track", ""))
         artist_label.config(text=song.get("artist", ""))
+        album_label.config(text=song.get("album_name", ""))
         wheel.itemconfig(
             play_text,
-            text="||" if song.get("is_playing", False) else ">",
+            text="Ⅱ" if song.get("is_playing", False) else "▶",
         )
 
         now = time.time()

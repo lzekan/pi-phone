@@ -10,6 +10,22 @@ from app.controller.controller_search import load_search_results
 from app.core.state import get_state
 from app.services.image_cache import get_photo_async
 from app.ui.components.virtual_keyboard import VirtualKeyboard
+from app.ui.theme import (
+    ACCENT,
+    ACCENT_ACTIVE,
+    BG,
+    CARD,
+    DANGER,
+    DIVIDER,
+    FONT,
+    PAGE_PAD,
+    SURFACE,
+    SURFACE_ACTIVE,
+    SURFACE_ALT,
+    TEXT,
+    TEXT_DIM,
+    TEXT_MUTED,
+)
 
 
 def _two_line_ellipsis(text, font, max_width):
@@ -57,27 +73,38 @@ def _get_track_id(song):
 
 
 def render_home(root, state, button_style):
-    frame = Frame(root, bg="black")
-    card_name_font_spec = ("DejaVu Sans", 9, "bold")
+    frame = Frame(root, bg=BG)
+    card_name_font_spec = (FONT, 9, "bold")
     card_name_font = tkfont.Font(root=root, font=card_name_font_spec)
 
-    header = Frame(frame, bg="black")
+    header = Frame(frame, bg=BG)
+    title_box = Frame(header, bg=BG)
+    title_box.pack(side=LEFT)
     Label(
-        header,
+        title_box,
+        text="YOUR MUSIC",
+        fg=ACCENT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 9, "bold"),
+    ).pack(fill=X)
+    Label(
+        title_box,
         text="Home",
-        fg="white",
-        bg="black",
-        font=("DejaVu Sans", 24, "bold"),
-    ).pack(side=LEFT)
+        fg=TEXT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 25, "bold"),
+    ).pack(fill=X)
     Button(
         header,
         text="X",
         command=root.destroy,
-        fg="white",
-        bg="#2A2A2A",
-        activeforeground="white",
-        activebackground="#D64545",
-        font=("DejaVu Sans", 14, "bold"),
+        fg=TEXT_MUTED,
+        bg=SURFACE_ALT,
+        activeforeground=TEXT,
+        activebackground=DANGER,
+        font=(FONT, 12, "bold"),
         relief="flat",
         borderwidth=0,
         highlightthickness=0,
@@ -85,29 +112,29 @@ def render_home(root, state, button_style):
         width=3,
         pady=4,
     ).pack(side=RIGHT)
-    header.pack(fill=X, padx=12, pady=(12, 6))
+    header.pack(fill=X, padx=PAGE_PAD, pady=(12, 8))
 
     search_box = Frame(
         frame,
-        bg="#202020",
-        highlightbackground="#3A3A3A",
-        highlightthickness=0.1,
+        bg=SURFACE_ALT,
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
     )
-    search_box.pack(fill=X, padx=14, pady=(2, 16))
+    search_box.pack(fill=X, padx=PAGE_PAD, pady=(2, 14))
 
     search_icon = Canvas(
         search_box,
         width=42,
         height=48,
-        bg="#202020",
+        bg=SURFACE_ALT,
         highlightthickness=0,
         cursor="hand2",
     )
     search_circle = search_icon.create_oval(
-        10, 12, 27, 29, outline="#B3B3B3", width=3
+        10, 12, 27, 29, outline=TEXT_MUTED, width=3
     )
     search_handle = search_icon.create_line(
-        25, 27, 33, 35, fill="#B3B3B3", width=3
+        25, 27, 33, 35, fill=TEXT_MUTED, width=3
     )
     search_icon.pack(side=LEFT)
 
@@ -115,26 +142,26 @@ def render_home(root, state, button_style):
     search_has_placeholder = True
     search_entry = Entry(
         search_box,
-        bg="#202020",
-        fg="#B3B3B3",
-        insertbackground="white",
+        bg=SURFACE_ALT,
+        fg=TEXT_MUTED,
+        insertbackground=TEXT,
         relief="flat",
         borderwidth=0,
         highlightthickness=0,
-        font=("DejaVu Sans", 15, "bold"),
+        font=(FONT, 14, "bold"),
     )
     search_entry.insert(0, search_placeholder)
     search_entry.pack(side=LEFT, fill=X, expand=True, padx=(0, 14), pady=12)
     virtual_keyboard = VirtualKeyboard(frame)
     search_results_box = Frame(
         frame,
-        bg="#181818",
-        highlightbackground="#3A3A3A",
+        bg=SURFACE,
+        highlightbackground=DIVIDER,
         highlightthickness=1,
     )
     search_results_canvas = Canvas(
         search_results_box,
-        bg="#181818",
+        bg=SURFACE,
         highlightthickness=0,
     )
     search_results_scroll = Scrollbar(
@@ -143,7 +170,7 @@ def render_home(root, state, button_style):
         command=search_results_canvas.yview,
         width=20,
     )
-    search_results_list = Frame(search_results_canvas, bg="#181818")
+    search_results_list = Frame(search_results_canvas, bg=SURFACE)
     search_results_window = search_results_canvas.create_window(
         (0, 0),
         window=search_results_list,
@@ -195,12 +222,12 @@ def render_home(root, state, button_style):
 
     def focus_search(_event):
         nonlocal search_has_placeholder
-        search_box.config(highlightbackground="#1DB954")
-        search_icon.itemconfig(search_circle, outline="#1DB954")
-        search_icon.itemconfig(search_handle, fill="#1DB954")
+        search_box.config(highlightbackground=ACCENT)
+        search_icon.itemconfig(search_circle, outline=ACCENT)
+        search_icon.itemconfig(search_handle, fill=ACCENT)
         if search_has_placeholder:
             search_entry.delete(0, "end")
-            search_entry.config(fg="white")
+            search_entry.config(fg=TEXT)
             search_has_placeholder = False
         virtual_keyboard.show(
             search_entry,
@@ -210,13 +237,13 @@ def render_home(root, state, button_style):
 
     def reset_search_style():
         nonlocal search_has_placeholder
-        search_box.config(highlightbackground="#3A3A3A")
-        search_icon.itemconfig(search_circle, outline="#B3B3B3")
-        search_icon.itemconfig(search_handle, fill="#B3B3B3")
+        search_box.config(highlightbackground=DIVIDER)
+        search_icon.itemconfig(search_circle, outline=TEXT_MUTED)
+        search_icon.itemconfig(search_handle, fill=TEXT_MUTED)
         if not search_entry.get().strip():
             search_entry.delete(0, "end")
             search_entry.insert(0, search_placeholder)
-            search_entry.config(fg="#888888")
+            search_entry.config(fg=TEXT_DIM)
             search_has_placeholder = True
 
     def leave_search(_event=None):
@@ -276,10 +303,10 @@ def render_home(root, state, button_style):
     frame.bind("<Unmap>", close_search)
     root.bind("<Button-1>", click_outside_search, add="+")
 
-    content_box = Frame(frame, bg="black")
-    content_box.pack(fill=BOTH, expand=True, padx=12)
-    content_canvas = Canvas(content_box, bg="black", highlightthickness=0)
-    content = Frame(content_canvas, bg="black")
+    content_box = Frame(frame, bg=BG)
+    content_box.pack(fill=BOTH, expand=True, padx=PAGE_PAD)
+    content_canvas = Canvas(content_box, bg=BG, highlightthickness=0)
+    content = Frame(content_canvas, bg=BG)
     content_window = content_canvas.create_window(
         (0, 0),
         window=content,
@@ -358,35 +385,30 @@ def render_home(root, state, button_style):
     Label(
         content,
         text="Recently played",
-        fg="white",
-        bg="black",
+        fg=TEXT,
+        bg=BG,
         anchor="w",
-        font=("DejaVu Sans", 16, "bold"),
-    ).pack(fill=X, pady=(4, 4))
-    recent_frame = Frame(content, bg="black")
+        font=(FONT, 17, "bold"),
+    ).pack(fill=X, pady=(6, 8))
+    recent_frame = Frame(content, bg=BG)
     recent_frame.pack(fill=X)
 
     Label(
         content,
         text="Your playlists",
-        fg="white",
-        bg="black",
+        fg=TEXT,
+        bg=BG,
         anchor="w",
-        font=("DejaVu Sans", 16, "bold"),
+        font=(FONT, 17, "bold"),
     ).pack(fill=X, pady=(20, 4))
 
-    playlist_box = Frame(content, bg="#111111", height=190)
+    playlist_box = Frame(content, bg=BG, height=174)
     playlist_box.pack(fill=X)
     playlist_box.pack_propagate(False)
-    playlist_canvas = Canvas(playlist_box, bg="#111111", highlightthickness=0)
-    playlist_scroll = Scrollbar(
-        playlist_box, orient=HORIZONTAL, command=playlist_canvas.xview, width=24
-    )
-    playlist_list = Frame(playlist_canvas, bg="#111111")
+    playlist_canvas = Canvas(playlist_box, bg=BG, highlightthickness=0)
+    playlist_list = Frame(playlist_canvas, bg=BG)
     playlist_window = playlist_canvas.create_window((0, 0), window=playlist_list, anchor="nw")
-    playlist_canvas.configure(xscrollcommand=playlist_scroll.set)
-    playlist_canvas.pack(side=TOP, fill=BOTH, expand=True)
-    playlist_scroll.pack(side=BOTTOM, fill=X)
+    playlist_canvas.pack(fill=BOTH, expand=True)
 
     playlist_list.bind(
         "<Configure>",
@@ -432,31 +454,23 @@ def render_home(root, state, button_style):
     Label(
         content,
         text="Your albums",
-        fg="white",
-        bg="black",
+        fg=TEXT,
+        bg=BG,
         anchor="w",
-        font=("DejaVu Sans", 16, "bold"),
+        font=(FONT, 17, "bold"),
     ).pack(fill=X, pady=(20, 4))
 
-    album_box = Frame(content, bg="#111111", height=190)
+    album_box = Frame(content, bg=BG, height=174)
     album_box.pack(fill=X)
     album_box.pack_propagate(False)
-    album_canvas = Canvas(album_box, bg="#111111", highlightthickness=0)
-    album_scroll = Scrollbar(
-        album_box,
-        orient=HORIZONTAL,
-        command=album_canvas.xview,
-        width=24,
-    )
-    album_list = Frame(album_canvas, bg="#111111")
+    album_canvas = Canvas(album_box, bg=BG, highlightthickness=0)
+    album_list = Frame(album_canvas, bg=BG)
     album_window = album_canvas.create_window(
         (0, 0),
         window=album_list,
         anchor="nw",
     )
-    album_canvas.configure(xscrollcommand=album_scroll.set)
-    album_canvas.pack(side=TOP, fill=BOTH, expand=True)
-    album_scroll.pack(side=BOTTOM, fill=X)
+    album_canvas.pack(fill=BOTH, expand=True)
 
     album_list.bind(
         "<Configure>",
@@ -510,25 +524,42 @@ def render_home(root, state, button_style):
         widget.bind("<ButtonPress-1>", start_album_drag)
         widget.bind("<B1-Motion>", drag_album)
 
-    mini_player = Frame(frame, bg="#181818", height=72, cursor="hand2")
+    mini_player = Frame(
+        frame,
+        bg=SURFACE_ALT,
+        height=76,
+        cursor="hand2",
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
+    )
     mini_player.pack_propagate(False)
-    mini_cover_frame = Frame(mini_player, width=56, height=56, bg="black")
+    mini_cover_frame = Frame(mini_player, width=58, height=58, bg=SURFACE)
     mini_cover_frame.pack(side=LEFT, padx=8, pady=8)
     mini_cover_frame.pack_propagate(False)
-    mini_cover = Label(mini_cover_frame, bg="black", borderwidth=0)
+    mini_cover = Label(mini_cover_frame, bg=SURFACE, borderwidth=0)
     mini_cover.pack(fill=BOTH, expand=True)
-    mini_text = Frame(mini_player, bg="#181818")
+    mini_text = Frame(mini_player, bg=SURFACE_ALT)
     mini_text.pack(side=LEFT, fill=BOTH, expand=True, pady=10)
     mini_track = Label(
-        mini_text, fg="white", bg="#181818", anchor="w", font=("DejaVu Sans", 12, "bold")
+        mini_text, fg=TEXT, bg=SURFACE_ALT, anchor="w", font=(FONT, 12, "bold")
     )
     mini_artist = Label(
-        mini_text, fg="#aaaaaa", bg="#181818", anchor="w", font=("DejaVu Sans", 10)
+        mini_text, fg=TEXT_MUTED, bg=SURFACE_ALT, anchor="w", font=(FONT, 10)
     )
     mini_track.pack(fill=X)
     mini_artist.pack(fill=X)
     mini_play = Button(
-        mini_player, text="||", command=on_toggle_play, width=3, **button_style
+        mini_player,
+        text="Ⅱ",
+        command=on_toggle_play,
+        width=3,
+        bg=ACCENT,
+        activebackground=ACCENT_ACTIVE,
+        **{
+            key: value
+            for key, value in button_style.items()
+            if key not in ("bg", "activebackground")
+        },
     )
     mini_play.pack(side=RIGHT, padx=8, pady=10)
 
@@ -601,8 +632,8 @@ def render_home(root, state, button_style):
                 Label(
                     search_results_list,
                     text="Searching...",
-                    fg="#B3B3B3",
-                    bg="#181818",
+                    fg=TEXT_MUTED,
+                    bg=SURFACE,
                     anchor="w",
                     padx=12,
                     pady=12,
@@ -611,8 +642,8 @@ def render_home(root, state, button_style):
                 Label(
                     search_results_list,
                     text="Search unavailable",
-                    fg="#FF6B6B",
-                    bg="#181818",
+                    fg=DANGER,
+                    bg=SURFACE,
                     anchor="w",
                     padx=12,
                     pady=12,
@@ -621,49 +652,49 @@ def render_home(root, state, button_style):
                 Label(
                     search_results_list,
                     text="No tracks found",
-                    fg="#B3B3B3",
-                    bg="#181818",
+                    fg=TEXT_MUTED,
+                    bg=SURFACE,
                     anchor="w",
                     padx=12,
                     pady=12,
                 ).pack(fill=X)
             else:
                 for track in results[:10]:
-                    row = Frame(search_results_list, bg="#181818", height=62, cursor="hand2")
+                    row = Frame(search_results_list, bg=SURFACE, height=62, cursor="hand2")
                     row.pack(fill=X)
                     row.pack_propagate(False)
 
                     cover_frame = Frame(
                         row,
-                        bg="#282828",
+                        bg=SURFACE_ALT,
                         width=48,
                         height=48,
                         cursor="hand2",
                     )
                     cover_frame.pack(side=LEFT, padx=(7, 10), pady=7)
                     cover_frame.pack_propagate(False)
-                    cover = Label(cover_frame, bg="#282828", cursor="hand2")
+                    cover = Label(cover_frame, bg=SURFACE_ALT, cursor="hand2")
                     cover.pack(fill=BOTH, expand=True)
 
-                    text_box = Frame(row, bg="#181818", cursor="hand2")
+                    text_box = Frame(row, bg=SURFACE, cursor="hand2")
                     text_box.pack(side=LEFT, fill=BOTH, expand=True, pady=8)
                     name_label = Label(
                         text_box,
                         text=track.get("name", ""),
-                        fg="white",
-                        bg="#181818",
+                        fg=TEXT,
+                        bg=SURFACE,
                         anchor="w",
-                        font=("DejaVu Sans", 11, "bold"),
+                        font=(FONT, 11, "bold"),
                         cursor="hand2",
                     )
                     name_label.pack(fill=X)
                     artist_label = Label(
                         text_box,
                         text=track.get("artist", ""),
-                        fg="#B3B3B3",
-                        bg="#181818",
+                        fg=TEXT_MUTED,
+                        bg=SURFACE,
                         anchor="w",
-                        font=("DejaVu Sans", 9),
+                        font=(FONT, 9),
                         cursor="hand2",
                     )
                     artist_label.pack(fill=X)
@@ -722,7 +753,15 @@ def render_home(root, state, button_style):
         new_recent_signature = (
             current_state.get("home_loading"),
             current_state.get("home_error"),
-            tuple((track.get("uri"), track.get("name"), track.get("artist")) for track in tracks),
+            tuple(
+                (
+                    track.get("uri"),
+                    track.get("name"),
+                    track.get("artist"),
+                    track.get("image_url"),
+                )
+                for track in tracks
+            ),
         )
         if new_recent_signature != recent_signature:
             recent_signature = new_recent_signature
@@ -733,24 +772,96 @@ def render_home(root, state, button_style):
                 message = current_state.get("home_error") or (
                     "Loading..." if current_state.get("home_loading") else "No recently played tracks"
                 )
-                Label(recent_frame, text=message, fg="#aaaaaa", bg="black", anchor="w").pack(fill=X)
+                Label(
+                    recent_frame,
+                    text=message,
+                    fg=TEXT_MUTED,
+                    bg=BG,
+                    anchor="w",
+                ).pack(fill=X)
             else:
                 for track in tracks:
-                    text = f'{track.get("name", "")}  —  {track.get("artist", "")}'
-                    Button(
+                    row = Frame(
                         recent_frame,
-                        text=text,
-                        command=lambda uri=track.get("uri"): play_selected_track(uri) if uri else None,
-                        fg="white",
-                        bg="#181818",
-                        activeforeground="white",
-                        activebackground="#333333",
-                        anchor="w",
-                        relief="flat",
+                        bg=SURFACE,
+                        height=56,
+                        cursor="hand2",
+                    )
+                    row.pack(fill=X, pady=2)
+                    row.pack_propagate(False)
+                    cover_frame = Frame(
+                        row,
+                        width=44,
+                        height=44,
+                        bg=SURFACE_ALT,
+                        cursor="hand2",
+                    )
+                    cover_frame.pack(side=LEFT, padx=6, pady=6)
+                    cover_frame.pack_propagate(False)
+                    cover = Label(
+                        cover_frame,
+                        bg=SURFACE_ALT,
                         borderwidth=0,
-                        padx=8,
-                        pady=4,
-                    ).pack(fill=X, pady=1)
+                        cursor="hand2",
+                    )
+                    cover.pack(fill=BOTH, expand=True)
+                    text_box = Frame(row, bg=SURFACE, cursor="hand2")
+                    text_box.pack(side=LEFT, fill=BOTH, expand=True, pady=7)
+                    name_label = Label(
+                        text_box,
+                        text=track.get("name", ""),
+                        fg=TEXT,
+                        bg=SURFACE,
+                        anchor="w",
+                        font=(FONT, 11, "bold"),
+                        cursor="hand2",
+                    )
+                    name_label.pack(fill=X)
+                    artist_label = Label(
+                        text_box,
+                        text=track.get("artist", ""),
+                        fg=TEXT_MUTED,
+                        bg=SURFACE,
+                        anchor="w",
+                        font=(FONT, 9),
+                        cursor="hand2",
+                    )
+                    artist_label.pack(fill=X)
+
+                    uri = track.get("uri")
+                    for widget in (
+                        row,
+                        cover_frame,
+                        cover,
+                        text_box,
+                        name_label,
+                        artist_label,
+                    ):
+                        widget.bind(
+                            "<ButtonRelease-1>",
+                            lambda _event, selected_uri=uri: (
+                                play_selected_track(selected_uri)
+                                if selected_uri and home_drag_mode != "vertical"
+                                else None
+                            ),
+                        )
+
+                    def show_recent_cover(photo, label=cover, expected_uri=uri):
+                        current_uris = {
+                            item.get("uri")
+                            for item in get_state().get("recent_tracks", [])
+                        }
+                        if expected_uri not in current_uris or not label.winfo_exists():
+                            return
+                        label.config(image=photo if photo is not None else "")
+                        label.image = photo
+
+                    get_photo_async(
+                        root,
+                        track.get("image_url"),
+                        (44, 44),
+                        show_recent_cover,
+                    )
 
         playlists = current_state.get("playlists", [])
         new_playlist_signature = (
@@ -778,21 +889,21 @@ def render_home(root, state, button_style):
                 Label(
                     playlist_list,
                     text=message,
-                    fg="#aaaaaa",
-                    bg="#111111",
+                    fg=TEXT_MUTED,
+                    bg=BG,
                     anchor="w",
                 ).pack(fill=X, padx=8, pady=8)
             else:
                 for playlist in playlists:
-                    card = Frame(playlist_list, width=136, height=166, bg="#181818")
-                    card.pack(side=LEFT, padx=5, pady=5)
+                    card = Frame(playlist_list, width=136, height=166, bg=CARD)
+                    card.pack(side=LEFT, padx=(0, 8), pady=4)
                     card.pack_propagate(False)
-                    cover_frame = Frame(card, width=120, height=120, bg="#282828")
+                    cover_frame = Frame(card, width=120, height=120, bg=SURFACE_ALT)
                     cover_frame.pack(padx=8, pady=(8, 3))
                     cover_frame.pack_propagate(False)
                     cover = Label(
                         cover_frame,
-                        bg="#282828",
+                        bg=SURFACE_ALT,
                         borderwidth=0,
                         highlightthickness=0,
                     )
@@ -804,8 +915,8 @@ def render_home(root, state, button_style):
                             card_name_font,
                             120,
                         ),
-                        fg="white",
-                        bg="#181818",
+                        fg=TEXT,
+                        bg=CARD,
                         anchor="center",
                         justify="center",
                         height=2,
@@ -878,22 +989,22 @@ def render_home(root, state, button_style):
             Label(
                 album_list,
                 text=message,
-                fg="#aaaaaa",
-                bg="#111111",
+                fg=TEXT_MUTED,
+                bg=BG,
                 anchor="w",
             ).pack(fill=X, padx=8, pady=8)
             return
 
         for album in albums:
-            card = Frame(album_list, width=136, height=166, bg="#181818")
-            card.pack(side=LEFT, padx=5, pady=5)
+            card = Frame(album_list, width=136, height=166, bg=CARD)
+            card.pack(side=LEFT, padx=(0, 8), pady=4)
             card.pack_propagate(False)
-            cover_frame = Frame(card, width=120, height=120, bg="#282828")
+            cover_frame = Frame(card, width=120, height=120, bg=SURFACE_ALT)
             cover_frame.pack(padx=8, pady=(8, 3))
             cover_frame.pack_propagate(False)
             cover = Label(
                 cover_frame,
-                bg="#282828",
+                bg=SURFACE_ALT,
                 borderwidth=0,
                 highlightthickness=0,
             )
@@ -905,8 +1016,8 @@ def render_home(root, state, button_style):
                     card_name_font,
                     120,
                 ),
-                fg="white",
-                bg="#181818",
+                fg=TEXT,
+                bg=CARD,
                 anchor="center",
                 justify="center",
                 height=2,
@@ -963,7 +1074,7 @@ def render_home(root, state, button_style):
             mini_cover.config(image=photo if photo is not None else "")
             mini_cover.image = photo
 
-        get_photo_async(root, url, (56, 56), show_cover)
+        get_photo_async(root, url, (58, 58), show_cover)
 
     def restore_cover(_event=None):
         photo = getattr(mini_cover, "image", None)
@@ -993,7 +1104,10 @@ def render_home(root, state, button_style):
 
         mini_track.config(text=song.get("track", "") or "Nothing playing")
         mini_artist.config(text=song.get("artist", ""))
-        mini_play.config(text="||" if song.get("is_playing", False) else ">", state=NORMAL)
+        mini_play.config(
+            text="Ⅱ" if song.get("is_playing", False) else "▶",
+            state=NORMAL,
+        )
 
     Thread(target=load_home, daemon=True).start()
     update(state)
