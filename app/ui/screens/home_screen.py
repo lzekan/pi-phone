@@ -1,6 +1,7 @@
 from threading import Thread
 from tkinter import BOTH, BOTTOM, HORIZONTAL, LEFT, NORMAL, RIGHT, TOP, X
 from tkinter import Button, Canvas, Entry, Frame, Label, Scrollbar
+from tkinter import font as tkfont
 
 from app.controller.controller_home import load_home
 from app.controller.controller_navigation import go_player, go_playlist
@@ -9,6 +10,41 @@ from app.controller.controller_search import load_search_results
 from app.core.state import get_state
 from app.services.image_cache import get_photo_async
 from app.ui.components.virtual_keyboard import VirtualKeyboard
+
+
+def _two_line_ellipsis(text, font, max_width):
+    remaining = " ".join((text or "").split())
+    if not remaining:
+        return ""
+
+    lines = []
+    for line_index in range(2):
+        if font.measure(remaining) <= max_width:
+            lines.append(remaining)
+            return "\n".join(lines)
+
+        suffix = "..." if line_index == 1 else ""
+        low = 0
+        high = len(remaining)
+        while low < high:
+            middle = (low + high + 1) // 2
+            candidate = remaining[:middle].rstrip() + suffix
+            if font.measure(candidate) <= max_width:
+                low = middle
+            else:
+                high = middle - 1
+
+        cut = low
+        if line_index == 0:
+            word_break = remaining.rfind(" ", 0, cut + 1)
+            if word_break > 0:
+                cut = word_break
+            lines.append(remaining[:cut].rstrip())
+            remaining = remaining[cut:].lstrip()
+        else:
+            lines.append(remaining[:cut].rstrip() + "...")
+
+    return "\n".join(lines)
 
 
 def _get_track_id(song):
@@ -22,6 +58,8 @@ def _get_track_id(song):
 
 def render_home(root, state, button_style):
     frame = Frame(root, bg="black")
+    card_name_font_spec = ("DejaVu Sans", 9, "bold")
+    card_name_font = tkfont.Font(root=root, font=card_name_font_spec)
 
     header = Frame(frame, bg="black")
     Label(
@@ -238,8 +276,85 @@ def render_home(root, state, button_style):
     frame.bind("<Unmap>", close_search)
     root.bind("<Button-1>", click_outside_search, add="+")
 
-    content = Frame(frame, bg="black")
-    content.pack(fill=BOTH, expand=True, padx=12)
+    content_box = Frame(frame, bg="black")
+    content_box.pack(fill=BOTH, expand=True, padx=12)
+    content_canvas = Canvas(content_box, bg="black", highlightthickness=0)
+    content = Frame(content_canvas, bg="black")
+    content_window = content_canvas.create_window(
+        (0, 0),
+        window=content,
+        anchor="nw",
+    )
+    content_canvas.pack(fill=BOTH, expand=True)
+    content.bind(
+        "<Configure>",
+        lambda _event: content_canvas.configure(
+            scrollregion=content_canvas.bbox("all")
+        ),
+    )
+    content_canvas.bind(
+        "<Configure>",
+        lambda event: content_canvas.itemconfigure(
+            content_window,
+            width=event.width,
+        ),
+    )
+    content_canvas.bind(
+        "<Button-4>",
+        lambda _event: content_canvas.yview_scroll(-1, "units"),
+    )
+    content_canvas.bind(
+        "<Button-5>",
+        lambda _event: content_canvas.yview_scroll(1, "units"),
+    )
+
+    home_drag_start_x = 0
+    home_drag_start_y = 0
+    home_drag_mode = None
+
+    def event_is_in_home_content(event):
+        if not frame.winfo_ismapped():
+            return False
+        widget_path = str(event.widget)
+        content_path = str(content)
+        canvas_path = str(content_canvas)
+        return (
+            widget_path == content_path
+            or widget_path.startswith(f"{content_path}.")
+            or widget_path == canvas_path
+        )
+
+    def content_canvas_y(event):
+        return event.y_root - content_canvas.winfo_rooty()
+
+    def start_home_drag(event):
+        nonlocal home_drag_start_x, home_drag_start_y, home_drag_mode
+        if not event_is_in_home_content(event):
+            return
+        home_drag_start_x = event.x_root
+        home_drag_start_y = event.y_root
+        home_drag_mode = None
+        content_canvas.scan_mark(0, content_canvas_y(event))
+
+    def drag_home(event):
+        nonlocal home_drag_mode
+        if not event_is_in_home_content(event):
+            return
+
+        dx = event.x_root - home_drag_start_x
+        dy = event.y_root - home_drag_start_y
+        if home_drag_mode is None and max(abs(dx), abs(dy)) > 5:
+            home_drag_mode = "vertical" if abs(dy) > abs(dx) else "horizontal"
+
+        if home_drag_mode == "vertical":
+            content_canvas.scan_dragto(
+                0,
+                content_canvas_y(event),
+                gain=1,
+            )
+
+    root.bind("<ButtonPress-1>", start_home_drag, add="+")
+    root.bind("<B1-Motion>", drag_home, add="+")
     Label(
         content,
         text="Recently played",
@@ -302,16 +417,98 @@ def render_home(root, state, button_style):
             playlist_dragged = True
         playlist_canvas.scan_dragto(playlist_canvas_x(event), 0, gain=1)
 
-    def finish_playlist_press(_event, playlist_uri, playlist_name):
-        if not playlist_dragged:
+    def finish_playlist_press(_event, playlist_uri, playlist_name, image_url):
+        if not playlist_dragged and home_drag_mode != "vertical":
             state["current_collection_name"] = playlist_name
             state["current_collection_uri"] = playlist_uri
             state["current_collection_type"] = "playlist"
+            state["current_collection_image_url"] = image_url
             go_playlist()
 
     for widget in (playlist_canvas, playlist_list):
         widget.bind("<ButtonPress-1>", start_playlist_drag)
         widget.bind("<B1-Motion>", drag_playlist)
+
+    Label(
+        content,
+        text="Your albums",
+        fg="white",
+        bg="black",
+        anchor="w",
+        font=("DejaVu Sans", 16, "bold"),
+    ).pack(fill=X, pady=(20, 4))
+
+    album_box = Frame(content, bg="#111111", height=190)
+    album_box.pack(fill=X)
+    album_box.pack_propagate(False)
+    album_canvas = Canvas(album_box, bg="#111111", highlightthickness=0)
+    album_scroll = Scrollbar(
+        album_box,
+        orient=HORIZONTAL,
+        command=album_canvas.xview,
+        width=24,
+    )
+    album_list = Frame(album_canvas, bg="#111111")
+    album_window = album_canvas.create_window(
+        (0, 0),
+        window=album_list,
+        anchor="nw",
+    )
+    album_canvas.configure(xscrollcommand=album_scroll.set)
+    album_canvas.pack(side=TOP, fill=BOTH, expand=True)
+    album_scroll.pack(side=BOTTOM, fill=X)
+
+    album_list.bind(
+        "<Configure>",
+        lambda _event: album_canvas.configure(
+            scrollregion=album_canvas.bbox("all")
+        ),
+    )
+    album_canvas.bind(
+        "<Configure>",
+        lambda event: album_canvas.itemconfigure(
+            album_window,
+            height=event.height,
+        ),
+    )
+    album_canvas.bind(
+        "<Button-4>",
+        lambda _event: album_canvas.xview_scroll(-1, "units"),
+    )
+    album_canvas.bind(
+        "<Button-5>",
+        lambda _event: album_canvas.xview_scroll(1, "units"),
+    )
+
+    album_drag_start_x = 0
+    album_dragged = False
+
+    def album_canvas_x(event):
+        return event.x_root - album_canvas.winfo_rootx()
+
+    def start_album_drag(event):
+        nonlocal album_drag_start_x, album_dragged
+        album_drag_start_x = event.x_root
+        album_dragged = False
+        album_canvas.scan_mark(album_canvas_x(event), 0)
+
+    def drag_album(event):
+        nonlocal album_dragged
+        if abs(event.x_root - album_drag_start_x) > 5:
+            album_dragged = True
+        album_canvas.scan_dragto(album_canvas_x(event), 0, gain=1)
+
+    def finish_album_press(_event, album_uri, album_name, image_url):
+        if not album_dragged and home_drag_mode != "vertical":
+            state["current_collection_name"] = album_name
+            state["current_collection_uri"] = album_uri
+            state["current_collection_type"] = "album"
+            state["current_collection_image_url"] = image_url
+            go_playlist()
+
+    for widget in (album_canvas, album_list):
+        widget.bind("<ButtonPress-1>", start_album_drag)
+        widget.bind("<B1-Motion>", drag_album)
 
     mini_player = Frame(frame, bg="#181818", height=72, cursor="hand2")
     mini_player.pack_propagate(False)
@@ -340,6 +537,7 @@ def render_home(root, state, button_style):
 
     recent_signature = None
     playlist_signature = None
+    album_signature = None
     search_results_signature = None
     mini_cover_key = None
 
@@ -518,7 +716,7 @@ def render_home(root, state, button_style):
         search_results_box.lift()
 
     def rebuild_lists(current_state):
-        nonlocal recent_signature, playlist_signature
+        nonlocal recent_signature, playlist_signature, album_signature
 
         tracks = current_state.get("recent_tracks", [])
         new_recent_signature = (
@@ -568,63 +766,190 @@ def render_home(root, state, button_style):
                 for playlist in playlists
             ),
         )
-        if new_playlist_signature == playlist_signature:
+        if new_playlist_signature != playlist_signature:
+            playlist_signature = new_playlist_signature
+            for child in playlist_list.winfo_children():
+                child.destroy()
+
+            if not playlists:
+                message = current_state.get("home_error") or (
+                    "Loading..." if current_state.get("home_loading") else "No saved playlists"
+                )
+                Label(
+                    playlist_list,
+                    text=message,
+                    fg="#aaaaaa",
+                    bg="#111111",
+                    anchor="w",
+                ).pack(fill=X, padx=8, pady=8)
+            else:
+                for playlist in playlists:
+                    card = Frame(playlist_list, width=136, height=166, bg="#181818")
+                    card.pack(side=LEFT, padx=5, pady=5)
+                    card.pack_propagate(False)
+                    cover_frame = Frame(card, width=120, height=120, bg="#282828")
+                    cover_frame.pack(padx=8, pady=(8, 3))
+                    cover_frame.pack_propagate(False)
+                    cover = Label(
+                        cover_frame,
+                        bg="#282828",
+                        borderwidth=0,
+                        highlightthickness=0,
+                    )
+                    cover.pack(fill=BOTH, expand=True)
+                    name_label = Label(
+                        card,
+                        text=_two_line_ellipsis(
+                            playlist.get("name", ""),
+                            card_name_font,
+                            120,
+                        ),
+                        fg="white",
+                        bg="#181818",
+                        anchor="center",
+                        justify="center",
+                        height=2,
+                        font=card_name_font_spec,
+                    )
+                    name_label.pack(fill=X, padx=5)
+
+                    image_url = playlist.get("image_url")
+                    expected_uri = playlist.get("uri")
+                    if expected_uri:
+                        for widget in (card, cover_frame, cover, name_label):
+                            widget.config(cursor="hand2")
+                            widget.bind("<ButtonPress-1>", start_playlist_drag)
+                            widget.bind("<B1-Motion>", drag_playlist)
+                            widget.bind(
+                                "<ButtonRelease-1>",
+                                lambda event,
+                                uri=expected_uri,
+                                name=playlist.get("name", ""),
+                                cover_url=image_url: finish_playlist_press(
+                                    event,
+                                    uri,
+                                    name,
+                                    cover_url,
+                                ),
+                            )
+
+                    def show_playlist_cover(photo, label=cover, uri=expected_uri):
+                        current_uris = {
+                            item.get("uri")
+                            for item in get_state().get("playlists", [])
+                        }
+                        if uri not in current_uris or not label.winfo_exists():
+                            return
+                        label.config(image=photo if photo is not None else "")
+                        label.image = photo
+
+                    get_photo_async(
+                        root,
+                        image_url,
+                        (120, 120),
+                        show_playlist_cover,
+                    )
+
+        albums = current_state.get("albums", [])
+        new_album_signature = (
+            current_state.get("home_loading"),
+            current_state.get("home_error"),
+            tuple(
+                (
+                    album.get("uri"),
+                    album.get("name"),
+                    album.get("artist"),
+                    album.get("image_url"),
+                )
+                for album in albums
+            ),
+        )
+        if new_album_signature == album_signature:
             return
 
-        playlist_signature = new_playlist_signature
-        for child in playlist_list.winfo_children():
+        album_signature = new_album_signature
+        for child in album_list.winfo_children():
             child.destroy()
 
-        if not playlists:
+        if not albums:
             message = current_state.get("home_error") or (
-                "Loading..." if current_state.get("home_loading") else "No saved playlists"
+                "Loading..." if current_state.get("home_loading") else "No saved albums"
             )
-            Label(playlist_list, text=message, fg="#aaaaaa", bg="#111111", anchor="w").pack(
-                fill=X, padx=8, pady=8
-            )
+            Label(
+                album_list,
+                text=message,
+                fg="#aaaaaa",
+                bg="#111111",
+                anchor="w",
+            ).pack(fill=X, padx=8, pady=8)
             return
 
-        for playlist in playlists:
-            card = Frame(playlist_list, width=136, height=166, bg="#181818")
+        for album in albums:
+            card = Frame(album_list, width=136, height=166, bg="#181818")
             card.pack(side=LEFT, padx=5, pady=5)
             card.pack_propagate(False)
             cover_frame = Frame(card, width=120, height=120, bg="#282828")
             cover_frame.pack(padx=8, pady=(8, 3))
             cover_frame.pack_propagate(False)
-            cover = Label(cover_frame, bg="#282828", borderwidth=0, highlightthickness=0)
+            cover = Label(
+                cover_frame,
+                bg="#282828",
+                borderwidth=0,
+                highlightthickness=0,
+            )
             cover.pack(fill=BOTH, expand=True)
             name_label = Label(
                 card,
-                text=playlist.get("name", ""),
+                text=_two_line_ellipsis(
+                    album.get("name", ""),
+                    card_name_font,
+                    120,
+                ),
                 fg="white",
                 bg="#181818",
                 anchor="center",
-                font=("DejaVu Sans", 9, "bold"),
+                justify="center",
+                height=2,
+                font=card_name_font_spec,
             )
             name_label.pack(fill=X, padx=5)
 
-            image_url = playlist.get("image_url")
-            expected_uri = playlist.get("uri")
+            image_url = album.get("image_url")
+            expected_uri = album.get("uri")
             if expected_uri:
                 for widget in (card, cover_frame, cover, name_label):
                     widget.config(cursor="hand2")
-                    widget.bind("<ButtonPress-1>", start_playlist_drag)
-                    widget.bind("<B1-Motion>", drag_playlist)
+                    widget.bind("<ButtonPress-1>", start_album_drag)
+                    widget.bind("<B1-Motion>", drag_album)
                     widget.bind(
                         "<ButtonRelease-1>",
-                        lambda event, uri=expected_uri, name=playlist.get("name", ""): (
-                            finish_playlist_press(event, uri, name)
+                        lambda event,
+                        uri=expected_uri,
+                        name=album.get("name", ""),
+                        cover_url=image_url: finish_album_press(
+                            event,
+                            uri,
+                            name,
+                            cover_url,
                         ),
                     )
 
-            def show_playlist_cover(photo, label=cover, uri=expected_uri):
-                current_uris = {item.get("uri") for item in get_state().get("playlists", [])}
+            def show_album_cover(photo, label=cover, uri=expected_uri):
+                current_uris = {
+                    item.get("uri")
+                    for item in get_state().get("albums", [])
+                }
                 if uri not in current_uris or not label.winfo_exists():
                     return
                 label.config(image=photo if photo is not None else "")
                 label.image = photo
 
-            get_photo_async(root, image_url, (120, 120), show_playlist_cover)
+            get_photo_async(
+                root,
+                image_url,
+                (120, 120),
+                show_album_cover,
+            )
 
     def set_mini_cover(cover_key, url):
         mini_cover.config(image="")
@@ -654,7 +979,7 @@ def render_home(root, state, button_style):
         song = current_state["song"]
         if song.get("track_id"):
             if not mini_player.winfo_manager():
-                mini_player.pack(fill=X, side=BOTTOM, before=content)
+                mini_player.pack(fill=X, side=BOTTOM, before=content_box)
         elif mini_player.winfo_manager():
             mini_player.pack_forget()
 

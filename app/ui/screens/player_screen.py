@@ -314,8 +314,6 @@ def render_player(root, state, button_style):
         state["current_collection_uri"] = f"spotify:album:{album_id}"
         state["current_collection_name"] = song.get("album_name") or "Album"
         state["current_collection_image_url"] = song.get("image_url")
-        state["current_collection_tracks"] = None
-        state["collection_error"] = None
 
         go_playlist()
 

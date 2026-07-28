@@ -1,6 +1,6 @@
 from threading import Thread
-from tkinter import BOTH, BOTTOM, HORIZONTAL, LEFT, NORMAL, RIGHT, TOP, X, Y
-from tkinter import Button, Canvas, Frame, Label, Scrollbar
+from tkinter import BOTH, BOTTOM, LEFT, NORMAL, RIGHT, X
+from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_home, go_player
 from app.controller.controller_player import play_selected_track, on_toggle_play
@@ -35,16 +35,9 @@ def render_playlist(root, state, button_style):
     tracks_box = Frame(frame, bg="black")
     tracks_box.pack(fill=BOTH, expand=True)
     tracks_canvas = Canvas(tracks_box, bg="black", highlightthickness=0)
-    tracks_scroll = Scrollbar(
-        tracks_box,
-        command=lambda *args: scroll_tracks(*args),
-        width=24,
-    )
     tracks_list = Frame(tracks_canvas, bg="black")
     tracks_window = tracks_canvas.create_window((0, 0), window=tracks_list, anchor="nw")
-    tracks_canvas.configure(yscrollcommand=tracks_scroll.set)
     tracks_canvas.pack(side=LEFT, fill=BOTH, expand=True)
-    tracks_scroll.pack(side=RIGHT, fill=Y)
 
     tracks_list.bind(
         "<Configure>",

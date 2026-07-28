@@ -32,7 +32,22 @@ def load_home():
                         "image_url": images[0]["url"] if images else None
                     })
 
+                albums = []
+                for item in spotify_service.get_user_albums() or []:
+                    album = item.get("album") or item.get("item") or {}
+                    images = album.get("images") or []
+                    albums.append({
+                        "name": album.get("name", ""),
+                        "artist": ", ".join(
+                            artist.get("name", "")
+                            for artist in album.get("artists", [])
+                        ),
+                        "uri": album.get("uri"),
+                        "image_url": images[0]["url"] if images else None
+                    })
+
                 state["playlists"] = playlists
+                state["albums"] = albums
                 break
             except (RequestConnectionError, RequestTimeout) as error:
                 if attempt == HOME_LOAD_ATTEMPTS - 1:

@@ -200,6 +200,28 @@ def get_user_playlists():
 
     return []
 
+def get_user_albums():
+    token = _get_token()
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    albums = []
+    url = "https://api.spotify.com/v1/me/albums?limit=50"
+
+    while url:
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT
+        )
+        response.raise_for_status()
+        data = response.json()
+        albums.extend(data.get("items", []))
+        url = data.get("next")
+
+    return albums
+
 def get_playlist_tracks(playlist_uri):
     token = _get_token()
     headers = {
