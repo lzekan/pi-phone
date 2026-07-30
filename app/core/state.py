@@ -11,7 +11,7 @@ _state = {
         "image_url": None
     },
     "next_song": None,
-    "screen": "home",
+    "screen": "launcher",
     "previous_screen": "home",
     "recent_tracks": [],
     "playlists": [],
@@ -37,4 +37,3 @@ def get_state():
 
 def get_song_state():
     return _state["song"]
-

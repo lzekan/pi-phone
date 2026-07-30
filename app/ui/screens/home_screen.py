@@ -4,7 +4,7 @@ from tkinter import Button, Canvas, Entry, Frame, Label, Scrollbar
 from tkinter import font as tkfont
 
 from app.controller.controller_home import load_home
-from app.controller.controller_navigation import go_player, go_playlist
+from app.controller.controller_navigation import go_launcher, go_player, go_playlist
 from app.controller.controller_player import on_toggle_play, play_selected_track
 from app.controller.controller_search import load_search_results
 from app.core.state import get_state
@@ -99,7 +99,7 @@ def render_home(root, state, button_style):
     Button(
         header,
         text="X",
-        command=root.destroy,
+        command=go_launcher,
         fg=TEXT_MUTED,
         bg=SURFACE_ALT,
         activeforeground=TEXT,
