@@ -1,5 +1,5 @@
 from tkinter import Tk
-from app.services.daemon_client import start_sync
+from app.features.spotify.services.daemon_client import start_sync
 from app.ui.app_ui import start_ui
 
 root = Tk()

@@ -1,4 +1,4 @@
-from app.services import spotify_service
+from app.features.spotify.services import spotify_service
 from app.core.state import get_state
 
 def load_playlist():

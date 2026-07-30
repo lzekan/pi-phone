@@ -3,8 +3,8 @@ from tkinter import BOTH, BOTTOM, LEFT, NORMAL, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_home, go_player
-from app.controller.controller_player import play_selected_track, on_toggle_play
-from app.controller.controller_playlist import load_playlist, load_album
+from app.features.spotify.controllers.player import play_selected_track, on_toggle_play
+from app.features.spotify.controllers.collection import load_playlist, load_album
 from app.core.state import get_state
 from app.services.image_cache import get_photo_async
 from app.ui.theme import (

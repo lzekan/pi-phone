@@ -3,7 +3,7 @@ import time
 from requests.exceptions import ConnectionError as RequestConnectionError
 from requests.exceptions import Timeout as RequestTimeout
 
-from app.services import spotify_service
+from app.features.spotify.services import spotify_service
 from app.core.state import get_state
 
 HOME_LOAD_ATTEMPTS = 3

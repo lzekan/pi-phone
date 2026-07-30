@@ -2,8 +2,7 @@ import time
 from queue import Queue
 from threading import Thread
 from app.core.state import get_song_state, get_state
-from app.services import spotify_service
-from app.services import daemon_client
+from app.features.spotify.services import daemon_client, spotify_service
 
 _command_queue = Queue()
 _command_generation = 0

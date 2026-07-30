@@ -6,7 +6,7 @@ from tkinter import Button, Canvas, Frame, Label
 from tkinter import ttk
 
 from app.controller.controller_navigation import go_back, go_playlist
-from app.controller.controller_player import on_next, on_prev, on_seek, on_toggle_play
+from app.features.spotify.controllers.player import on_next, on_prev, on_seek, on_toggle_play
 from app.controller.controller_volume import on_volume_down, on_volume_up
 from app.core.state import get_state
 from app.services import audio_output_service

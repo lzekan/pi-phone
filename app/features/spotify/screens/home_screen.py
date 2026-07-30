@@ -3,10 +3,10 @@ from tkinter import BOTH, BOTTOM, HORIZONTAL, LEFT, NORMAL, RIGHT, TOP, X
 from tkinter import Button, Canvas, Entry, Frame, Label, Scrollbar
 from tkinter import font as tkfont
 
-from app.controller.controller_home import load_home
+from app.features.spotify.controllers.home import load_home
 from app.controller.controller_navigation import go_launcher, go_player, go_playlist
-from app.controller.controller_player import on_toggle_play, play_selected_track
-from app.controller.controller_search import load_search_results
+from app.features.spotify.controllers.player import on_toggle_play, play_selected_track
+from app.features.spotify.controllers.search import load_search_results
 from app.core.state import get_state
 from app.services.image_cache import get_photo_async
 from app.ui.components.virtual_keyboard import VirtualKeyboard

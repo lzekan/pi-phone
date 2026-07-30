@@ -2,10 +2,10 @@ from tkinter import BOTH
 
 from app.controller.controller_navigation import go_launcher
 from app.core.state import get_state
-from app.ui.screens.home_screen import render_home
 from app.ui.screens.launcher_screen import render_launcher
-from app.ui.screens.player_screen import render_player
-from app.ui.screens.playlist_screen import render_playlist
+from app.features.spotify.screens.home_screen import render_home
+from app.features.spotify.screens.player_screen import render_player
+from app.features.spotify.screens.collection_screen import render_playlist
 from app.ui.theme import SURFACE_ALT, SURFACE_ACTIVE, TEXT, FONT
 
 
