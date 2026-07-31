@@ -1,5 +1,6 @@
 _state = {
     "song": {
+        "source": "spotify",
         "track_id": None,
         "track": "",
         "artist": "",
@@ -28,7 +29,14 @@ _state = {
     "search_query": "",
     "search_results": [],
     "search_loading": False,
-    "search_error": None
+    "search_error": None,
+    "local": {
+        "tracks": [],
+        "current_index": None,
+        "loading": False,
+        "loaded": False,
+        "error": None
+    }
 }
 
 

@@ -3,6 +3,7 @@ from tkinter import BOTH, LEFT, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_home
+from app.features.local_audio.controller import open_library
 from app.ui.theme import (
     ACCENT,
     BG,
@@ -147,12 +148,19 @@ def render_launcher(root, _state):
     secondary = Frame(apps, bg=BG)
     secondary.pack(fill=X)
 
-    def create_placeholder_tile(parent, title, symbol):
+    def create_placeholder_tile(
+        parent,
+        title,
+        symbol,
+        subtitle="COMING SOON",
+        command=None,
+    ):
         tile = Frame(
             parent,
             bg=SURFACE_ALT,
             width=218,
             height=210,
+            cursor="hand2" if command else "",
             highlightbackground=DIVIDER,
             highlightthickness=1,
         )
@@ -163,6 +171,7 @@ def render_launcher(root, _state):
             text=symbol,
             fg=TEXT,
             bg=SURFACE_ALT,
+            cursor="hand2" if command else "",
             font=(FONT, 42, "bold"),
         ).pack(pady=(26, 8))
         Label(
@@ -170,18 +179,31 @@ def render_launcher(root, _state):
             text=title,
             fg=TEXT,
             bg=SURFACE_ALT,
+            cursor="hand2" if command else "",
             font=(FONT, 16, "bold"),
         ).pack()
         Label(
             tile,
-            text="COMING SOON",
+            text=subtitle,
             fg=TEXT_DIM,
             bg=SURFACE_ALT,
+            cursor="hand2" if command else "",
             font=(FONT, 8, "bold"),
         ).pack(pady=(8, 0))
+
+        if command:
+            for widget in (tile, *tile.winfo_children()):
+                widget.bind("<Button-1>", lambda _event: command())
+
         return tile
 
-    create_placeholder_tile(secondary, "Offline", "♫")
+    create_placeholder_tile(
+        secondary,
+        "Offline",
+        "♫",
+        subtitle="LOCAL LIBRARY",
+        command=open_library,
+    )
     spacer = Frame(secondary, bg=BG, width=10)
     spacer.pack(side=LEFT)
     create_placeholder_tile(secondary, "Settings", "⚙")

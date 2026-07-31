@@ -24,3 +24,6 @@ def go_playlist():
 
 def go_launcher():
     get_state()["screen"] = "launcher"
+
+def go_local_library():
+    get_state()["screen"] = "local_library"

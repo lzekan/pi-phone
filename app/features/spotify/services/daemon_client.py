@@ -66,6 +66,12 @@ def start_sync(root):
             sync_recent_tracks()
             song_state = get_song_state()
 
+            # Local playback owns the shared song state until the user
+            # explicitly starts a Spotify track again.
+            if song_state.get("source") == "local":
+                root.after(300, sync)
+                return
+
             now = time.time()
             incoming_track_id = file_state.get("track_id")
 
@@ -84,6 +90,7 @@ def start_sync(root):
             get_state()["next_song"] = file_state.get("next_song")
 
             # ---- ALWAYS ----
+            song_state["source"] = "spotify"
             song_state["track_id"] = incoming_track_id
             song_state["track"] = file_state.get("track")
             song_state["artist"] = file_state.get("artist")

@@ -3,9 +3,10 @@ from tkinter import BOTH
 from app.controller.controller_navigation import go_launcher
 from app.core.state import get_state
 from app.ui.screens.launcher_screen import render_launcher
+from app.ui.screens.player_screen import render_player
 from app.features.spotify.screens.home_screen import render_home
-from app.features.spotify.screens.player_screen import render_player
 from app.features.spotify.screens.collection_screen import render_playlist
+from app.features.local_audio.screens.library_screen import render_local_library
 from app.ui.theme import SURFACE_ALT, SURFACE_ACTIVE, TEXT, FONT
 
 
@@ -34,6 +35,7 @@ def start_ui(root):
     launcher_screen = render_launcher(root, get_state())
     player_screen = render_player(root, get_state(), BUTTON_STYLE)
     playlist_screen = render_playlist(root, get_state(), BUTTON_STYLE)
+    local_library_screen = render_local_library(root, get_state(), BUTTON_STYLE)
     visible_screen = None
 
     def render():
@@ -57,6 +59,7 @@ def start_ui(root):
             launcher_screen["frame"].pack_forget()
             player_screen["frame"].pack_forget()
             playlist_screen["frame"].pack_forget()
+            local_library_screen["frame"].pack_forget()
 
             if screen == "launcher":
                 current = launcher_screen
@@ -64,6 +67,8 @@ def start_ui(root):
                 current = player_screen
             elif screen == "playlist":
                 current = playlist_screen
+            elif screen == "local_library":
+                current = local_library_screen
             else:
                 current = home_screen
 
@@ -73,6 +78,7 @@ def start_ui(root):
         launcher_screen["update"](state)
         player_screen["update"](state)
         playlist_screen["update"](state)
+        local_library_screen["update"](state)
         root.after(100, render)
 
     root.after(100, render)

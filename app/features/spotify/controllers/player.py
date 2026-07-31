@@ -2,6 +2,7 @@ import time
 from queue import Queue
 from threading import Thread
 from app.core.state import get_song_state, get_state
+from app.features.local_audio.playback_service import stop_playback
 from app.features.spotify.services import daemon_client, spotify_service
 
 _command_queue = Queue()
@@ -108,7 +109,9 @@ def on_seek(position_ms):
 
 
 def play_selected_track(uri, context_uri=None):
+    stop_playback()
     song_state = get_song_state()
+    song_state["source"] = "spotify"
     generation = _next_command_generation()
     song_state["progress_ms"] = 0
 
