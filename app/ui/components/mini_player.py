@@ -1,5 +1,6 @@
 from tkinter import BOTH, BOTTOM, LEFT, NORMAL, RIGHT, X
 from tkinter import Button, Frame, Label
+from tkinter import font as tkfont
 
 from app.controller.controller_navigation import go_player
 from app.controller.controller_player import on_toggle_play
@@ -45,7 +46,6 @@ def create_mini_player(root, parent, button_style, before=None):
     cover.pack(fill=BOTH, expand=True)
 
     text = Frame(frame, bg=SURFACE_ALT)
-    text.pack(side=LEFT, fill=BOTH, expand=True, pady=10)
     track = Label(
         text,
         fg=TEXT,
@@ -63,6 +63,32 @@ def create_mini_player(root, parent, button_style, before=None):
     track.pack(fill=X)
     artist.pack(fill=X)
 
+    track_font = tkfont.Font(font=track.cget("font"))
+    artist_font = tkfont.Font(font=artist.cget("font"))
+
+    def fit_text(value, label, label_font):
+        value = value or ""
+        available_width = label.winfo_width()
+
+        if available_width <= 1 or label_font.measure(value) <= available_width:
+            return value
+
+        ellipsis = "\u2026"
+        ellipsis_width = label_font.measure(ellipsis)
+        low = 0
+        high = len(value)
+
+        while low < high:
+            middle = (low + high + 1) // 2
+            candidate_width = label_font.measure(value[:middle]) + ellipsis_width
+
+            if candidate_width <= available_width:
+                low = middle
+            else:
+                high = middle - 1
+
+        return value[:low] + ellipsis
+
     play = Button(
         frame,
         text="Ⅱ",
@@ -77,6 +103,7 @@ def create_mini_player(root, parent, button_style, before=None):
         },
     )
     play.pack(side=RIGHT, padx=8, pady=10)
+    text.pack(side=LEFT, fill=BOTH, expand=True, pady=10)
 
     for widget in (frame, cover_frame, cover, text, track, artist):
         widget.bind("<Button-1>", lambda _event: go_player())
@@ -141,8 +168,10 @@ def create_mini_player(root, parent, button_style, before=None):
             cover_key = new_cover_key
             set_cover(new_cover_key, song)
 
-        track.config(text=song.get("track", "") or "Nothing playing")
-        artist.config(text=song.get("artist", ""))
+        track_text = song.get("track", "") or "Nothing playing"
+        artist_text = song.get("artist", "")
+        track.config(text=fit_text(track_text, track, track_font))
+        artist.config(text=fit_text(artist_text, artist, artist_font))
         play.config(
             text="Ⅱ" if song.get("is_playing", False) else "▶",
             state=NORMAL,
