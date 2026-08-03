@@ -1,5 +1,3 @@
-from tkinter import BOTH
-
 from app.controller.controller_navigation import go_launcher
 from app.core.state import get_state
 from app.ui.screens.launcher_screen import render_launcher
@@ -31,11 +29,17 @@ def start_ui(root):
     root.title("Pi Phone")
     root.attributes("-fullscreen", True)
 
-    home_screen = render_home(root, get_state(), BUTTON_STYLE)
-    launcher_screen = render_launcher(root, get_state())
-    player_screen = render_player(root, get_state(), BUTTON_STYLE)
-    playlist_screen = render_playlist(root, get_state(), BUTTON_STYLE)
-    local_library_screen = render_local_library(root, get_state(), BUTTON_STYLE)
+    screens = {
+        "home": render_home(root, get_state(), BUTTON_STYLE),
+        "launcher": render_launcher(root, get_state()),
+        "player": render_player(root, get_state(), BUTTON_STYLE),
+        "playlist": render_playlist(root, get_state(), BUTTON_STYLE),
+        "local_library": render_local_library(root, get_state(), BUTTON_STYLE),
+    }
+
+    for screen in screens.values():
+        screen["frame"].place(x=0, y=0, relwidth=1, relheight=1)
+
     visible_screen = None
 
     def render():
@@ -53,32 +57,17 @@ def start_ui(root):
             state["screen"] = "home"
             screen = "home"
 
+        if screen not in screens:
+            state["screen"] = "home"
+            screen = "home"
+
+        current = screens[screen]
+
         if screen != visible_screen:
             visible_screen = screen
-            home_screen["frame"].pack_forget()
-            launcher_screen["frame"].pack_forget()
-            player_screen["frame"].pack_forget()
-            playlist_screen["frame"].pack_forget()
-            local_library_screen["frame"].pack_forget()
+            current["frame"].tkraise()
 
-            if screen == "launcher":
-                current = launcher_screen
-            elif screen == "player":
-                current = player_screen
-            elif screen == "playlist":
-                current = playlist_screen
-            elif screen == "local_library":
-                current = local_library_screen
-            else:
-                current = home_screen
-
-            current["frame"].pack(fill=BOTH, expand=True)
-
-        home_screen["update"](state)
-        launcher_screen["update"](state)
-        player_screen["update"](state)
-        playlist_screen["update"](state)
-        local_library_screen["update"](state)
+        current["update"](state)
         root.after(100, render)
 
-    root.after(100, render)
+    render()
