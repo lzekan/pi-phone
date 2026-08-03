@@ -542,12 +542,12 @@ def render_home(root, state, button_style):
             search_dragged = True
         search_results_canvas.scan_dragto(0, search_canvas_y(event), gain=1)
 
-    def finish_search_press(_event, uri):
+    def finish_search_press(_event, uri, track_data):
         if search_dragged or not uri:
             return
         close_search()
         root.after_idle(frame.focus_set)
-        play_selected_track(uri)
+        play_selected_track(uri, track_data=track_data)
 
     for widget in (search_results_canvas, search_results_list):
         widget.bind("<ButtonPress-1>", start_search_drag)
@@ -668,10 +668,13 @@ def render_home(root, state, button_style):
                         widget.bind("<B1-Motion>", drag_search_results)
                         widget.bind(
                             "<ButtonRelease-1>",
-                            lambda event, selected_uri=uri: finish_search_press(
-                                event,
-                                selected_uri,
-                            ),
+                            lambda event, selected_uri=uri, selected_track=track: (
+                                finish_search_press(
+                                    event,
+                                    selected_uri,
+                                    selected_track,
+                                )
+                            )
                         )
 
                     def show_search_cover(photo, label=cover, expected_uri=uri):
@@ -794,8 +797,9 @@ def render_home(root, state, button_style):
                     ):
                         widget.bind(
                             "<ButtonRelease-1>",
-                            lambda _event, selected_uri=uri: (
-                                play_selected_track(selected_uri)
+                            lambda _event, selected_uri=uri, selected_track=track: (
+                                play_selected_track(selected_uri, 
+                                track_data=selected_track)
                                 if selected_uri and home_drag_mode != "vertical"
                                 else None
                             ),

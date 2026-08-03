@@ -12,6 +12,7 @@ play_start_time = 0
 
 pending_track_change = False
 track_before_change = None
+expected_track_after_change = None
 track_change_start = 0
 
 TRACK_CHANGE_TIMEOUT = 5
@@ -20,12 +21,15 @@ SEEK_CONFIRM_TIMEOUT = 5
 SEEK_CONFIRM_TOLERANCE_MS = 1500
 
 
-def expect_track_change():
+def expect_track_change(expected_track_id=None):
     global pending_track_change, track_before_change, track_change_start
+    global expected_track_after_change
     global pending_seek_position, seek_start_time
 
     if not pending_track_change:
         track_before_change = get_song_state().get("track_id")
+
+    expected_track_after_change = expected_track_id
     pending_track_change = True
     track_change_start = time.time()
     pending_seek_position = 0
@@ -57,7 +61,7 @@ def start_sync(root):
     def sync():
         global pending_seek_position, pending_play_state
         global seek_start_time, play_start_time
-        global pending_track_change
+        global pending_track_change, expected_track_after_change
 
         try:
             with open(SONG_STATE_FILE) as f:
@@ -76,7 +80,11 @@ def start_sync(root):
             incoming_track_id = file_state.get("track_id")
 
             if pending_track_change:
-                changed = incoming_track_id != track_before_change
+                if expected_track_after_change is not None:
+                    changed = incoming_track_id == expected_track_after_change
+                else:
+                    changed = incoming_track_id != track_before_change
+
                 settled = now - track_change_start >= TRACK_CHANGE_SETTLE_TIME
                 timed_out = now - track_change_start >= TRACK_CHANGE_TIMEOUT
 
@@ -85,6 +93,7 @@ def start_sync(root):
                     return
 
                 pending_track_change = False
+                expected_track_after_change = None
 
             track_changed = incoming_track_id != song_state.get("track_id")
             get_state()["next_song"] = file_state.get("next_song")
@@ -133,6 +142,11 @@ def start_sync(root):
 
             # ---- PLAY ----
             incoming_play = file_state.get("is_playing", False)
+
+            state = get_state()
+
+            if incoming_play and state.get("playback_owner") != "local":
+                state["playback_owner"] = "spotify"
 
             if track_changed:
                 song_state["is_playing"] = incoming_play

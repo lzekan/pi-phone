@@ -39,7 +39,8 @@ _state = {
         "loading": False,
         "loaded": False,
         "error": None
-    }
+    },
+    "playback_owner": None
 }
 
 

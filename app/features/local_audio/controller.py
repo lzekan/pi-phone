@@ -6,6 +6,7 @@ from app.controller.controller_navigation import go_local_library, go_player
 from app.core.state import get_song_state, get_state
 from app.features.local_audio.library_service import scan_library
 from app.features.local_audio import playback_service
+from app.services import playback_coordinator
 
 
 _play_generation = 0
@@ -156,7 +157,7 @@ def _start_track(index):
         if not _is_current(generation, track_path):
             return
         try:
-            process = playback_service.play_file(track_path)
+            process = playback_coordinator.play_local(track_path)
             if not playback_service.wait_until_ready(process):
                 raise RuntimeError("mpv se nije pokrenuo")
             Thread(target=monitor, args=(process,), daemon=True).start()

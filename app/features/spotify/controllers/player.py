@@ -2,7 +2,7 @@ import time
 from queue import Queue
 from threading import Thread
 from app.core.state import get_song_state, get_state
-from app.features.local_audio.playback_service import stop_playback
+from app.services import playback_coordinator
 from app.features.spotify.services import daemon_client, spotify_service
 
 _command_queue = Queue()
@@ -108,14 +108,35 @@ def on_seek(position_ms):
     _run_async(lambda: spotify_service.seek(position_ms), rollback)
 
 
-def play_selected_track(uri, context_uri=None):
-    stop_playback()
+def play_selected_track(uri, context_uri=None, track_data=None):
     song_state = get_song_state()
     song_state["source"] = "spotify"
     generation = _next_command_generation()
     song_state["progress_ms"] = 0
 
-    daemon_client.expect_track_change()
+    daemon_client.expect_track_change(uri.split(":")[-1])
+
+    if track_data:
+        song_state.update({
+            "track_id": track_data.get("track_id") or uri.split(":")[-1],
+            "track": track_data.get("name", ""),
+            "artist": track_data.get("artist", ""),
+            "album_name": track_data.get("album_name", ""),
+            "album_id": track_data.get("album_id", ""),
+            "duration_ms": track_data.get("duration_ms") or 1,
+            "image_url": track_data.get("image_url"),
+        })
+    else:
+        song_state.update({
+            "track_id": uri.split(":")[-1],
+            "track": "",
+            "artist": "",
+            "album_name": "",
+            "album_id": "",
+            "duration_ms": 1,
+            "image_url": None,
+        })
+
     daemon_client.pending_play_state = True
     daemon_client.play_start_time = time.time()
 
@@ -125,5 +146,6 @@ def play_selected_track(uri, context_uri=None):
             daemon_client.pending_track_change = False
             daemon_client.pending_seek_position = None
             daemon_client.pending_play_state = None
+            daemon_client.expected_track_after_change = None
 
-    _run_async(lambda: spotify_service.play_track(uri, context_uri), rollback)
+    _run_async(lambda: playback_coordinator.play_spotify(uri, context_uri), rollback)
