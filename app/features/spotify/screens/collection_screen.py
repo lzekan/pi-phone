@@ -4,7 +4,11 @@ from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_home
 from app.features.spotify.controllers.player import play_selected_track
-from app.features.spotify.controllers.collection import load_playlist, load_album
+from app.features.spotify.controllers.collection import (
+    load_album,
+    load_more_collection,
+    load_playlist,
+)
 from app.core.state import get_state
 from app.services.image_cache import get_photo_async
 from app.ui.components.mini_player import create_mini_player
@@ -119,6 +123,9 @@ def render_playlist(root, state, button_style):
     loaded_collection_uri = None
     tracks_signature = None
     cover_rows = []
+    rendered_collection_key = None
+    rendered_track_count = 0
+    placeholder_visible = False
     drag_start_y = 0
     tracks_dragged = False
     collection_cover_key = None
@@ -158,6 +165,19 @@ def render_playlist(root, state, button_style):
 
     def schedule_visible_covers():
         root.after_idle(load_visible_covers)
+        root.after_idle(maybe_load_more)
+
+    def maybe_load_more():
+        current_state = get_state()
+        if (
+            current_state.get("collection_loading")
+            or current_state.get("current_collection_next_offset") is None
+        ):
+            return
+
+        _first, last = tracks_canvas.yview()
+        if last >= 0.85:
+            Thread(target=load_more_collection, daemon=True).start()
 
     def scroll_tracks(*args):
         tracks_canvas.yview(*args)
@@ -200,29 +220,36 @@ def render_playlist(root, state, button_style):
 
     def rebuild_tracks(current_state):
         nonlocal tracks_signature, cover_rows
+        nonlocal rendered_collection_key, rendered_track_count
+        nonlocal placeholder_visible
 
         tracks = current_state.get("current_collection_tracks")
-        new_signature = (
+        collection_key = (
             current_state.get("current_collection_uri"),
             current_state.get("current_collection_type"),
+        )
+        new_signature = (
+            collection_key,
             current_state.get("collection_error"),
-            None if tracks is None else tuple(
-                (
-                    track.get("uri"),
-                    track.get("name"),
-                    track.get("artist"),
-                    track.get("image_url"),
-                )
-                for track in tracks
-            ),
+            None if tracks is None else len(tracks),
         )
         if new_signature == tracks_signature:
             return
 
         tracks_signature = new_signature
-        cover_rows = []
-        for widget in tracks_list.winfo_children():
-            widget.destroy()
+        needs_reset = (
+            collection_key != rendered_collection_key
+            or tracks is None
+            or current_state.get("collection_error")
+            or (tracks is not None and len(tracks) < rendered_track_count)
+        )
+        if needs_reset:
+            rendered_collection_key = collection_key
+            rendered_track_count = 0
+            placeholder_visible = False
+            cover_rows = []
+            for widget in tracks_list.winfo_children():
+                widget.destroy()
 
         error = current_state.get("collection_error")
         if error:
@@ -234,6 +261,7 @@ def render_playlist(root, state, button_style):
                 wraplength=400,
                 font=(FONT, 13, "bold"),
             ).pack(fill=X, padx=12, pady=12)
+            placeholder_visible = True
             return
 
         if tracks is None:
@@ -244,7 +272,16 @@ def render_playlist(root, state, button_style):
                 bg=BG,
                 font=(FONT, 14, "bold"),
             ).pack(fill=X, padx=12, pady=12)
+            placeholder_visible = True
             return
+
+
+        if placeholder_visible:
+            for widget in tracks_list.winfo_children():
+                widget.destroy()
+            cover_rows = []
+            rendered_track_count = 0
+            placeholder_visible = False
 
         if not tracks:
             Label(
@@ -254,11 +291,15 @@ def render_playlist(root, state, button_style):
                 bg=BG,
                 font=(FONT, 14, "bold"),
             ).pack(fill=X, padx=12, pady=12)
+            placeholder_visible = True
             return
 
         collection_uri = current_state.get("current_collection_uri")
         is_album = current_state.get("current_collection_type") == "album"
-        for index, track in enumerate(tracks, start=1):
+        for index, track in enumerate(
+            tracks[rendered_track_count:],
+            start=rendered_track_count + 1,
+        ):
             track_frame = Frame(
                 tracks_list,
                 bg=CARD,
@@ -340,6 +381,7 @@ def render_playlist(root, state, button_style):
                     "requested": False,
                 })
 
+        rendered_track_count = len(tracks)
         schedule_visible_covers()
 
     def set_collection_cover(cover_key, url):
@@ -377,11 +419,13 @@ def render_playlist(root, state, button_style):
         collection_type = current_state.get("current_collection_type") or "collection"
         collection_type_label.config(text=collection_type.upper())
         tracks = current_state.get("current_collection_tracks")
+        total_tracks = current_state.get("current_collection_total")
+        displayed_track_count = total_tracks if total_tracks is not None else len(tracks or [])
         collection_count_label.config(
             text=(
                 "LOADING TRACKS"
                 if tracks is None
-                else f"{len(tracks)} TRACK{'S' if len(tracks) != 1 else ''}"
+                else f"{displayed_track_count} TRACK{'S' if displayed_track_count != 1 else ''}"
             )
         )
 
@@ -402,6 +446,9 @@ def render_playlist(root, state, button_style):
             tracks_canvas.yview_moveto(0)
             current_state["collection_error"] = None
             current_state["current_collection_tracks"] = None
+            current_state["current_collection_next_offset"] = None
+            current_state["current_collection_total"] = None
+            current_state["collection_loading"] = False
             tracks_signature = None
 
             target = (

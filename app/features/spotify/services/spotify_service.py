@@ -222,49 +222,53 @@ def get_user_albums():
 
     return albums
 
-def get_playlist_tracks(playlist_uri):
+def get_playlist_tracks(playlist_uri, limit=10, offset=0):
     token = _get_token()
     headers = {
         "Authorization": f"Bearer {token}"
     }
-    tracks = []
     url = f"https://api.spotify.com/v1/playlists/{playlist_uri.split(':')[-1]}/items"
 
-    while url:
-        response = requests.get(
-            url,
-            headers=headers,
-            timeout=REQUEST_TIMEOUT
-        )
-        response.raise_for_status()
-        data = response.json()
-        tracks.extend(data.get("items", []))
-        url = data.get("next")
+    response = requests.get(
+        url,
+        headers=headers,
+        params={"limit": limit, "offset": offset},
+        timeout=REQUEST_TIMEOUT
+    )
+    response.raise_for_status()
+    data = response.json()
+    items = data.get("items", [])
 
-    return tracks   
+    return {
+        "items": items,
+        "next_offset": offset + len(items) if data.get("next") else None,
+        "total": data.get("total", len(items)),
+    }
 
-def get_album_tracks(album_id):
+def get_album_tracks(album_id, limit=10, offset=0):
     token = _get_token()
     headers = {
         "Authorization": f"Bearer {token}"
     }
 
-    tracks = []
     url = f"https://api.spotify.com/v1/albums/{album_id}/tracks"
 
-    while url:
-        response = requests.get(
-            url, 
-            headers=headers,
-            timeout=REQUEST_TIMEOUT
-        )
+    response = requests.get(
+        url,
+        headers=headers,
+        params={"limit": limit, "offset": offset},
+        timeout=REQUEST_TIMEOUT
+    )
 
-        response.raise_for_status()
-        data = response.json()
-        tracks.extend(data.get("items", []))
-        url = data.get("next")
+    response.raise_for_status()
+    data = response.json()
+    items = data.get("items", [])
 
-    return tracks   
+    return {
+        "items": items,
+        "next_offset": offset + len(items) if data.get("next") else None,
+        "total": data.get("total", len(items)),
+    }
 
 
 

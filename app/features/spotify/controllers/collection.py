@@ -1,46 +1,84 @@
+from threading import Lock
+
 from app.features.spotify.services import spotify_service
 from app.core.state import get_state
 
-def load_playlist():
+PAGE_SIZE = 10
+_requests_lock = Lock()
+_active_requests = set()
+
+
+def _load_collection_page(collection_type, reset):
     state = get_state()
+    collection_uri = state.get("current_collection_uri")
+
+    if not collection_uri or state.get("current_collection_type") != collection_type:
+        return
+
+    offset = 0 if reset else state.get("current_collection_next_offset")
+    if not reset and offset is None:
+        return
+
+    request_key = (collection_uri, offset)
+    with _requests_lock:
+        if request_key in _active_requests:
+            return
+        _active_requests.add(request_key)
+
+    state["collection_loading"] = True
+    state["collection_error"] = None
 
     try:
-        playlist_tracks = []
+        if collection_type == "album":
+            album_id = collection_uri.split(":")[-1]
+            page = spotify_service.get_album_tracks(album_id, PAGE_SIZE, offset)
+        else:
+            album_id = None
+            page = spotify_service.get_playlist_tracks(collection_uri, PAGE_SIZE, offset)
 
-        for track in spotify_service.get_playlist_tracks(state["current_collection_uri"]) or []:
-            track = track.get("item") or track.get("track") or {}
+        loaded_tracks = []
+        for track in page["items"]:
+            track = track.get("item") or track.get("track") or track
             images = track.get("album", {}).get("images") or []
-            playlist_tracks.append({
+            loaded_tracks.append({
                 "name": track.get("name", ""),
                 "artist": ", ".join([artist.get("name", "") for artist in track.get("artists", [])]),
-                "album_id": track.get("album", {}).get("id"),
-                "uri": track.get("uri"),
-                "image_url": images[0]["url"] if images else None
+                "album_id": album_id or track.get("album", {}).get("id"),
+                "image_url": (
+                    state.get("current_collection_image_url")
+                    if collection_type == "album"
+                    else images[0]["url"] if images else None
+                ),
+                "uri": track.get("uri")
             })
-        state["current_collection_tracks"] = playlist_tracks
+
+        if state.get("current_collection_uri") != collection_uri:
+            return
+
+        existing_tracks = [] if reset else state.get("current_collection_tracks") or []
+        state["current_collection_tracks"] = existing_tracks + loaded_tracks
+        state["current_collection_next_offset"] = page["next_offset"]
+        state["current_collection_total"] = page["total"]
 
     except Exception as e:
-        state["collection_error"] = str(e)
+        if state.get("current_collection_uri") == collection_uri:
+            state["collection_error"] = str(e)
+    finally:
+        if state.get("current_collection_uri") == collection_uri:
+            state["collection_loading"] = False
+        with _requests_lock:
+            _active_requests.discard(request_key)
+
+
+def load_playlist():
+    _load_collection_page("playlist", reset=True)
 
 
 def load_album():
-    state = get_state()
+    _load_collection_page("album", reset=True)
 
-    try:
-        album_tracks = []
-        album_id = state["current_collection_uri"].split(":")[-1]
 
-        for track in spotify_service.get_album_tracks(album_id) or []:
-            track = track.get("item") or track.get("track") or track
-            images = track.get("album", {}).get("images") or []
-            album_tracks.append({
-                "name": track.get("name", ""),
-                "artist": ", ".join([artist.get("name", "") for artist in track.get("artists", [])]),
-                "album_id": album_id,
-                "image_url": state.get("current_collection_image_url"),
-                "uri": track.get("uri")
-            })
-        state["current_collection_tracks"] = album_tracks
-
-    except Exception as e:
-        state["collection_error"] = str(e)
+def load_more_collection():
+    collection_type = get_state().get("current_collection_type")
+    if collection_type in ("playlist", "album"):
+        _load_collection_page(collection_type, reset=False)
