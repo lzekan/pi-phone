@@ -4,6 +4,7 @@ from threading import Thread
 from app.core.state import get_song_state, get_state
 from app.services import playback_coordinator
 from app.features.spotify.services import daemon_client, spotify_service
+from app.controller.controller_navigation import go_player
 
 _command_queue = Queue()
 _command_generation = 0
@@ -141,6 +142,8 @@ def play_selected_track(uri, context_uri=None, track_data=None):
     daemon_client.play_start_time = time.time()
 
     song_state["is_playing"] = True
+    go_player()
+    
     def rollback():
         if generation == _command_generation:
             daemon_client.pending_track_change = False
