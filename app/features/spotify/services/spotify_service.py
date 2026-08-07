@@ -222,6 +222,21 @@ def get_user_albums():
 
     return albums
 
+
+def get_recently_played(limit=50):
+    token = _get_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = requests.get(
+        "https://api.spotify.com/v1/me/player/recently-played",
+        headers=headers,
+        params={"limit": limit},
+        timeout=REQUEST_TIMEOUT
+    )
+    response.raise_for_status()
+    return response.json().get("items", [])
+
+
 def get_playlist_tracks(playlist_uri, limit=10, offset=0):
     token = _get_token()
     headers = {

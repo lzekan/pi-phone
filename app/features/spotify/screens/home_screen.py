@@ -3,7 +3,7 @@ from tkinter import BOTH, HORIZONTAL, LEFT, RIGHT, TOP, X
 from tkinter import Button, Canvas, Entry, Frame, Label, Scrollbar
 from tkinter import font as tkfont
 
-from app.features.spotify.controllers.home import load_home
+from app.features.spotify.controllers.home import load_home, load_recently_played
 from app.controller.controller_navigation import go_launcher, go_playlist
 from app.features.spotify.controllers.player import play_selected_track
 from app.features.spotify.controllers.search import load_search_results
@@ -1026,6 +1026,9 @@ def render_home(root, state, button_style):
         rebuild_search_results(current_state)
         mini_player["update"](current_state)
 
+    def on_show():
+        Thread(target=load_recently_played, daemon=True).start()
+
     Thread(target=load_home, daemon=True).start()
     update(state)
-    return {"frame": frame, "update": update}
+    return {"frame": frame, "update": update, "on_show": on_show}

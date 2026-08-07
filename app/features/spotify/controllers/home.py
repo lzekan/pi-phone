@@ -1,4 +1,5 @@
 import time
+from threading import Lock
 
 from requests.exceptions import ConnectionError as RequestConnectionError
 from requests.exceptions import Timeout as RequestTimeout
@@ -8,6 +9,50 @@ from app.core.state import get_state
 
 HOME_LOAD_ATTEMPTS = 3
 HOME_LOAD_RETRY_DELAY = 1
+RECENT_TRACKS_LIMIT = 5
+
+_recent_tracks_lock = Lock()
+
+
+def load_recently_played():
+    if not _recent_tracks_lock.acquire(blocking=False):
+        return
+
+    try:
+        recent_tracks = []
+        seen_track_ids = set()
+
+        for item in spotify_service.get_recently_played():
+            track = item.get("track") or {}
+            track_id = track.get("id")
+            if not track_id or track_id in seen_track_ids:
+                continue
+
+            album = track.get("album") or {}
+            images = album.get("images") or []
+            seen_track_ids.add(track_id)
+            recent_tracks.append({
+                "track_id": track_id,
+                "name": track.get("name", ""),
+                "artist": ", ".join(
+                    artist.get("name", "")
+                    for artist in track.get("artists", [])
+                ),
+                "uri": track.get("uri"),
+                "image_url": images[0]["url"] if images else None,
+                "album_name": album.get("name", ""),
+                "album_id": album.get("id", ""),
+                "duration_ms": track.get("duration_ms") or 1,
+            })
+
+            if len(recent_tracks) >= RECENT_TRACKS_LIMIT:
+                break
+
+        get_state()["recent_tracks"] = recent_tracks
+    except Exception as error:
+        print(f"[RECENT TRACKS WARN] Spotify history refresh failed: {error}")
+    finally:
+        _recent_tracks_lock.release()
 
 
 def load_home():

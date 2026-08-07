@@ -66,6 +66,9 @@ def start_ui(root):
         if screen != visible_screen:
             visible_screen = screen
             current["frame"].tkraise()
+            on_show = current.get("on_show")
+            if on_show:
+                on_show()
 
         current["update"](state)
         root.after(100, render)
