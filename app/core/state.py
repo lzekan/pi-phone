@@ -12,9 +12,11 @@ _state = {
         "image_url": None
     },
     "next_song": None,
+    "queue": [],
     "screen": "launcher",
     "previous_screen": "home",
     "recent_tracks": [],
+    "device_recent_tracks": [],
     "playlists": [],
     "albums": [],
     "user": {},

@@ -110,25 +110,41 @@ def render_player(root, state, button_style):
         font=(FONT, 18, "bold"),
     ).pack(side=LEFT, padx=14)
 
-    output_panel = Frame(header, bg=BG)
     output_button = Button(
-        output_panel,
-        text="Output",
+        frame,
+        text="◉  Output",
         fg=TEXT,
         bg=SURFACE_ALT,
         activeforeground=TEXT,
         activebackground=SURFACE_ACTIVE,
-        font=(FONT, 9, "bold"),
+        font=(FONT, 10, "bold"),
         relief="flat",
         borderwidth=0,
-        highlightthickness=0,
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
         takefocus=False,
-        padx=8,
-        pady=5,
+        padx=12,
+        pady=8,
     )
-    output_button.pack(fill=X)
-    output_panel.pack(side=RIGHT, anchor="ne")
     output_results = Frame(frame, bg=SURFACE)
+
+    queue_button = Button(
+        frame,
+        text="☷  Queue",
+        fg=TEXT,
+        bg=SURFACE_ALT,
+        activeforeground=TEXT,
+        activebackground=SURFACE_ACTIVE,
+        font=(FONT, 10, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
+        takefocus=False,
+        padx=12,
+        pady=8,
+    )
+    queue_results = Frame(frame, bg=SURFACE)
 
     now_playing = Frame(
         frame,
@@ -397,7 +413,7 @@ def render_player(root, state, button_style):
             child.destroy()
 
     def open_output_results():
-        output_results.place(relx=1, x=-10, y=55, anchor="ne")
+        output_results.place(relx=0, rely=1, x=12, y=-58, anchor="sw")
         output_results.lift()
 
     def close_output_results():
@@ -503,9 +519,130 @@ def render_player(root, state, button_style):
         if output_results.winfo_children():
             close_output_results()
         else:
+            close_queue_results()
             load_output_devices()
 
     output_button.config(command=toggle_output_devices)
+
+    def clear_queue_results():
+        for child in queue_results.winfo_children():
+            child.destroy()
+
+    def close_queue_results():
+        clear_queue_results()
+        queue_results.place_forget()
+
+    def open_queue_results():
+        clear_queue_results()
+        close_output_results()
+        queue_results.place(relx=1, rely=1, x=-12, y=-58, anchor="se")
+
+        queue = get_state().get("queue", [])
+        Label(
+            queue_results,
+            text="UP NEXT",
+            fg=ACCENT,
+            bg=SURFACE,
+            anchor="w",
+            font=(FONT, 8, "bold"),
+            padx=10,
+            pady=7,
+        ).pack(fill=X)
+
+        if not queue:
+            Label(
+                queue_results,
+                text="No tracks in queue",
+                fg=TEXT_MUTED,
+                bg=SURFACE,
+                anchor="w",
+                font=(FONT, 9),
+                padx=10,
+                pady=10,
+            ).pack(fill=X)
+        else:
+            for queued_track in queue[:8]:
+                row = Frame(queue_results, bg=SURFACE_ALT)
+                row.pack(fill=X, pady=(0, 1))
+                Label(
+                    row,
+                    text=queued_track.get("track", "Unknown track"),
+                    fg=TEXT,
+                    bg=SURFACE_ALT,
+                    anchor="w",
+                    font=(FONT, 9, "bold"),
+                    width=28,
+                    padx=10,
+                    pady=4,
+                ).pack(fill=X)
+                Label(
+                    row,
+                    text=queued_track.get("artist", ""),
+                    fg=TEXT_MUTED,
+                    bg=SURFACE_ALT,
+                    anchor="w",
+                    font=(FONT, 8),
+                    width=28,
+                    padx=10,
+                    pady=2,
+                ).pack(fill=X)
+
+            remaining = len(queue) - 8
+            if remaining > 0:
+                Label(
+                    queue_results,
+                    text=f"+ {remaining} more tracks",
+                    fg=TEXT_MUTED,
+                    bg=SURFACE,
+                    font=(FONT, 8),
+                    padx=10,
+                    pady=6,
+                ).pack(fill=X)
+
+        queue_results.lift()
+
+    def toggle_queue_results():
+        if queue_results.winfo_children():
+            close_queue_results()
+        else:
+            open_queue_results()
+
+    queue_button.config(command=toggle_queue_results)
+    output_button.place(relx=0, rely=1, x=12, y=-12, anchor="sw")
+    queue_button.place(relx=1, rely=1, x=-12, y=-12, anchor="se")
+    output_button.lift()
+    queue_button.lift()
+
+    def close_dropdowns():
+        close_output_results()
+        close_queue_results()
+
+    def is_inside(widget, container):
+        while widget is not None:
+            if widget == container:
+                return True
+            widget = getattr(widget, "master", None)
+        return False
+
+    def close_dropdowns_on_outside_press(event):
+        if get_state().get("screen") != "player":
+            return
+        if any(
+            is_inside(event.widget, container)
+            for container in (
+                output_button,
+                output_results,
+                queue_button,
+                queue_results,
+            )
+        ):
+            return
+        close_dropdowns()
+
+    root.bind("<ButtonPress-1>", close_dropdowns_on_outside_press, add="+")
+
+    def on_show():
+        close_dropdowns()
 
     player_cover_key = None
     preloaded_next_track_id = None
@@ -630,4 +767,4 @@ def render_player(root, state, button_style):
             remaining_label.config(text=f"-{_format_time(duration - progress_ms)}")
 
     update(state)
-    return {"frame": frame, "update": update}
+    return {"frame": frame, "update": update, "on_show": on_show}

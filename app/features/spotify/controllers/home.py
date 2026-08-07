@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 from threading import Lock
 
 from requests.exceptions import ConnectionError as RequestConnectionError
@@ -19,19 +20,25 @@ def load_recently_played():
         return
 
     try:
-        recent_tracks = []
-        seen_track_ids = set()
+        api_tracks = []
 
         for item in spotify_service.get_recently_played():
             track = item.get("track") or {}
             track_id = track.get("id")
-            if not track_id or track_id in seen_track_ids:
+            if not track_id:
                 continue
 
             album = track.get("album") or {}
             images = album.get("images") or []
-            seen_track_ids.add(track_id)
-            recent_tracks.append({
+            played_at = item.get("played_at")
+            played_at_ms = 0
+            if played_at:
+                played_at_ms = int(
+                    datetime.fromisoformat(played_at.replace("Z", "+00:00")).timestamp()
+                    * 1000
+                )
+
+            api_tracks.append({
                 "track_id": track_id,
                 "name": track.get("name", ""),
                 "artist": ", ".join(
@@ -43,9 +50,24 @@ def load_recently_played():
                 "album_name": album.get("name", ""),
                 "album_id": album.get("id", ""),
                 "duration_ms": track.get("duration_ms") or 1,
+                "played_at_ms": played_at_ms,
             })
 
-            if len(recent_tracks) >= RECENT_TRACKS_LIMIT:
+        combined_tracks = api_tracks + get_state().get("device_recent_tracks", [])
+        combined_tracks.sort(
+            key=lambda track: track.get("played_at_ms", 0),
+            reverse=True,
+        )
+
+        recent_tracks = []
+        seen_track_ids = set()
+        for track in combined_tracks:
+            track_id = track.get("track_id")
+            if not track_id or track_id in seen_track_ids:
+                continue
+            seen_track_ids.add(track_id)
+            recent_tracks.append(track)
+            if len(recent_tracks) == RECENT_TRACKS_LIMIT:
                 break
 
         get_state()["recent_tracks"] = recent_tracks

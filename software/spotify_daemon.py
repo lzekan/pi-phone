@@ -41,7 +41,9 @@ def recent_track_payload(track):
         "album_id": payload["album_id"],
         "album_name": payload["album_name"],
         "uri": payload["uri"],
-        "image_url": payload["image_url"]
+        "image_url": payload["image_url"],
+        "duration_ms": payload["duration_ms"],
+        "played_at_ms": int(time.time() * 1000)
     }
 
 
@@ -84,7 +86,8 @@ def save_inactive_state():
         "duration_ms": 1,
         "is_playing": False,
         "image_url": None,
-        "next_song": None
+        "next_song": None,
+        "queue": []
     }
 
     with open(SONG_STATE_FILE, "w", encoding="utf-8") as f:
@@ -143,6 +146,7 @@ headers = {
 }
 
 next_song = None
+queue_tracks = []
 last_queue_fetch = 0
 last_track_id = None
 recent_history = load_recent_tracks()
@@ -187,6 +191,7 @@ while True:
             new_track = track_id != last_track_id
             if new_track:
                 next_song = None
+                queue_tracks = []
                 last_track_id = track_id
                 last_queue_fetch = 0
 
@@ -212,8 +217,9 @@ while True:
                         timeout=REQUEST_TIMEOUT
                     )
                     if queue_response.status_code == 200:
-                        queue = queue_response.json().get("queue", [])
-                        next_song = track_payload(queue[0]) if queue else None
+                        queue_items = queue_response.json().get("queue", [])
+                        queue_tracks = [track_payload(item) for item in queue_items]
+                        next_song = queue_tracks[0] if queue_tracks else None
                 except requests.RequestException as error:
                     print(f"[WARN] Queue preload failed: {error}. Keeping current state")
 
@@ -227,7 +233,8 @@ while True:
                 "duration_ms": data["item"]["duration_ms"],
                 "is_playing": data["is_playing"],
                 "image_url": image_url,
-                "next_song": next_song
+                "next_song": next_song,
+                "queue": queue_tracks
             }
 
             with open(SONG_STATE_FILE, "w", encoding="utf-8") as f:
@@ -237,11 +244,13 @@ while True:
 
         else:
             next_song = None
+            queue_tracks = []
             save_inactive_state()
             print("Nothing playing")
 
     elif r.status_code == 204:
         next_song = None
+        queue_tracks = []
         save_inactive_state()
         print("Nothing playing")
 

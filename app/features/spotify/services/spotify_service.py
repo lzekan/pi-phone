@@ -223,7 +223,7 @@ def get_user_albums():
     return albums
 
 
-def get_recently_played(limit=50):
+def get_recently_played(limit=15):
     token = _get_token()
     headers = {"Authorization": f"Bearer {token}"}
 

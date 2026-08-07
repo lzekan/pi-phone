@@ -51,9 +51,11 @@ def start_sync(root):
                 recent_tracks = json.load(f)
 
             if isinstance(recent_tracks, list):
+                get_state()["device_recent_tracks"] = recent_tracks
                 get_state()["recent_tracks"] = recent_tracks
                 recent_tracks_mtime_ns = mtime_ns
         except FileNotFoundError:
+            get_state()["device_recent_tracks"] = []
             get_state()["recent_tracks"] = []
         except (OSError, json.JSONDecodeError) as error:
             print("RECENT TRACKS ERROR:", error)
@@ -97,6 +99,7 @@ def start_sync(root):
 
             track_changed = incoming_track_id != song_state.get("track_id")
             get_state()["next_song"] = file_state.get("next_song")
+            get_state()["queue"] = file_state.get("queue", [])
 
             # ---- ALWAYS ----
             song_state["source"] = "spotify"
