@@ -97,7 +97,23 @@ def start_sync(root):
                 pending_track_change = False
                 expected_track_after_change = None
 
-            track_changed = incoming_track_id != song_state.get("track_id")
+            current_track_id = song_state.get("track_id")
+            current_progress = song_state.get("progress_ms", 0) or 0
+            duration_ms = song_state.get("duration_ms", 1) or 1
+            incoming_progress = file_state.get("progress_ms", 0) or 0
+
+            same_track_restarted = (
+                incoming_track_id == current_track_id
+                and pending_seek_position is None
+                and incoming_progress <= 10000
+                and current_progress >= max(10000, duration_ms - 20000)
+            )
+
+            track_changed = (
+                incoming_track_id != current_track_id
+                or same_track_restarted
+            )
+
             get_state()["next_song"] = file_state.get("next_song")
             get_state()["queue"] = file_state.get("queue", [])
 

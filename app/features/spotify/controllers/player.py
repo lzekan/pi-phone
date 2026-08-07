@@ -1,10 +1,12 @@
 import time
 from queue import Queue
 from threading import Thread
+
 from app.core.state import get_song_state, get_state
 from app.services import playback_coordinator
 from app.features.spotify.services import daemon_client, spotify_service
 from app.controller.controller_navigation import go_player
+from app.features.spotify.controllers import queue as queue_controller
 
 _command_queue = Queue()
 _command_generation = 0
@@ -54,12 +56,29 @@ def on_toggle_play():
 
 def on_next():
     song_state = get_song_state()
-    next_song = get_state().get("next_song")
+    manual_queue = get_state().get("spotify_manual_queue", [])
+    manual_next = manual_queue[0] if manual_queue else None
+    next_song = manual_next or get_state().get("next_song")
+
+    if manual_next:
+        queue_controller.commit_next_manual_queue_item()
+
     generation = _next_command_generation()
     daemon_client.expect_track_change()
 
     if next_song:
-        song_state.update(next_song)
+        song_state.update({
+            "track_id": (
+                next_song.get("track_id")
+                or next_song.get("uri", "").split(":")[-1]
+            ),
+            "track": next_song.get("track", ""),
+            "artist": next_song.get("artist", ""),
+            "album_id": next_song.get("album_id", ""),
+            "album_name": next_song.get("album_name", ""),
+            "duration_ms": next_song.get("duration_ms", 1),
+            "image_url": next_song.get("image_url"),
+        })
         get_state()["next_song"] = None
 
     song_state["progress_ms"] = 0
@@ -73,7 +92,13 @@ def on_next():
             daemon_client.pending_seek_position = None
             daemon_client.pending_play_state = None
 
-    _run_async(spotify_service.next_track, rollback)
+    def advance():
+        if manual_next:
+            queue_controller.ensure_next_manual_item_committed()
+
+        spotify_service.next_track()
+
+    _run_async(advance, rollback)
 
 
 def on_prev():

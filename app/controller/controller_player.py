@@ -1,4 +1,4 @@
-from app.core.state import get_song_state
+from app.core.state import get_song_state, get_state
 from app.features.local_audio import controller as local_controller
 from app.features.spotify.controllers import player as spotify_controller
 

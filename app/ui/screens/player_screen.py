@@ -5,7 +5,14 @@ from tkinter import BOTH, LEFT, NORMAL, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 from tkinter import ttk
 
-from app.controller.controller_player import on_next, on_prev, on_seek, on_toggle_play
+from app.controller.controller_player import (
+    on_next,
+    on_prev,
+    on_seek,
+    on_toggle_play,
+)
+
+from app.controller.controller_queue import remove_queue_item
 from app.controller.controller_navigation import go_back, go_playlist
 from app.controller.controller_volume import on_volume_down, on_volume_up
 from app.core.state import get_state
@@ -102,14 +109,6 @@ def render_player(root, state, button_style):
         takefocus=False,
         **button_style,
     ).pack(side=LEFT)
-    Label(
-        header,
-        text="Now Playing",
-        fg=TEXT,
-        bg=BG,
-        font=(FONT, 18, "bold"),
-    ).pack(side=LEFT, padx=14)
-
     output_button = Button(
         frame,
         text="◉  Output",
@@ -532,12 +531,24 @@ def render_player(root, state, button_style):
         clear_queue_results()
         queue_results.place_forget()
 
+    def remove_manual_item_and_refresh(queue_id):
+        if remove_queue_item(queue_id):
+            root.after_idle(open_queue_results)
+
     def open_queue_results():
         clear_queue_results()
         close_output_results()
-        queue_results.place(relx=1, rely=1, x=-12, y=-58, anchor="se")
+        queue_results.place(
+            relx=1,
+            rely=1,
+            x=-12,
+            y=-58,
+            width=456,
+            height=430,
+            anchor="se",
+        )
 
-        queue = get_state().get("queue", [])
+        queue = get_state().get("spotify_manual_queue", [])
         Label(
             queue_results,
             text="UP NEXT",
@@ -561,43 +572,171 @@ def render_player(root, state, button_style):
                 pady=10,
             ).pack(fill=X)
         else:
-            for queued_track in queue[:8]:
-                row = Frame(queue_results, bg=SURFACE_ALT)
+            queue_canvas = Canvas(
+                queue_results,
+                bg=SURFACE,
+                highlightthickness=0,
+                borderwidth=0,
+            )
+            queue_canvas.pack(fill=BOTH, expand=True)
+            queue_list = Frame(queue_canvas, bg=SURFACE)
+            queue_window = queue_canvas.create_window(
+                (0, 0),
+                window=queue_list,
+                anchor="nw",
+            )
+
+            queue_list.bind(
+                "<Configure>",
+                lambda _event: queue_canvas.configure(
+                    scrollregion=queue_canvas.bbox("all")
+                ),
+            )
+            queue_canvas.bind(
+                "<Configure>",
+                lambda event: queue_canvas.itemconfigure(
+                    queue_window,
+                    width=event.width,
+                ),
+            )
+
+            def queue_canvas_y(event):
+                return int(
+                    queue_canvas.canvasy(
+                        event.y_root - queue_canvas.winfo_rooty()
+                    )
+                )
+
+            def start_queue_drag(event):
+                queue_canvas.scan_mark(0, queue_canvas_y(event))
+
+            def drag_queue(event):
+                queue_canvas.scan_dragto(0, queue_canvas_y(event), gain=1)
+
+            def scroll_queue(event):
+                queue_canvas.yview_scroll(
+                    -1 if event.delta > 0 else 1,
+                    "units",
+                )
+
+            def bind_queue_drag(*widgets):
+                for widget in widgets:
+                    widget.bind("<ButtonPress-1>", start_queue_drag)
+                    widget.bind("<B1-Motion>", drag_queue)
+                    widget.bind("<MouseWheel>", scroll_queue)
+                    widget.bind(
+                        "<Button-4>",
+                        lambda _event: queue_canvas.yview_scroll(-1, "units"),
+                    )
+                    widget.bind(
+                        "<Button-5>",
+                        lambda _event: queue_canvas.yview_scroll(1, "units"),
+                    )
+
+            queue_canvas.bind("<ButtonPress-1>", start_queue_drag)
+            queue_canvas.bind("<B1-Motion>", drag_queue)
+            queue_canvas.bind("<MouseWheel>", scroll_queue)
+            queue_canvas.bind(
+                "<Button-4>",
+                lambda _event: queue_canvas.yview_scroll(-1, "units"),
+            )
+            queue_canvas.bind(
+                "<Button-5>",
+                lambda _event: queue_canvas.yview_scroll(1, "units"),
+            )
+
+            for queued_track in queue:
+                row = Frame(queue_list, bg=SURFACE_ALT, height=64)
                 row.pack(fill=X, pady=(0, 1))
-                Label(
+                row.pack_propagate(False)
+
+                cover_frame = Frame(row, bg=SURFACE, width=50, height=50)
+                cover_frame.pack(side=LEFT, padx=(7, 10), pady=7)
+                cover_frame.pack_propagate(False)
+                cover = Label(cover_frame, bg=SURFACE, borderwidth=0)
+                cover.pack(fill=BOTH, expand=True)
+
+                is_committed = queued_track.get("committed", False)
+
+                remove_button = Button(
                     row,
+                    text="•" if is_committed else "×",
+                    command=lambda queue_id=queued_track.get("queue_id"): (
+                        remove_manual_item_and_refresh(queue_id)
+                        if queue_id is not None
+                        else None
+                    ),
+                    state="disabled" if is_committed else NORMAL,
+                    disabledforeground=TEXT_DIM,
+                    fg=TEXT_MUTED,
+                    bg=SURFACE_ALT,
+                    activeforeground=TEXT,
+                    activebackground=SURFACE_ACTIVE,
+                    font=(FONT, 15, "bold"),
+                    relief="flat",
+                    borderwidth=0,
+                    highlightthickness=0,
+                    takefocus=False,
+                    padx=12,
+                    pady=8,
+                )
+                remove_button.pack(side=RIGHT, padx=(4, 7))
+
+                info = Frame(row, bg=SURFACE_ALT)
+                info.pack(side=LEFT, fill=BOTH, expand=True, pady=8)
+                name_label = Label(
+                    info,
                     text=queued_track.get("track", "Unknown track"),
                     fg=TEXT,
                     bg=SURFACE_ALT,
                     anchor="w",
-                    font=(FONT, 9, "bold"),
-                    width=28,
-                    padx=10,
-                    pady=4,
-                ).pack(fill=X)
-                Label(
-                    row,
+                    font=(FONT, 10, "bold"),
+                )
+                name_label.pack(fill=X)
+                artist_label = Label(
+                    info,
                     text=queued_track.get("artist", ""),
                     fg=TEXT_MUTED,
                     bg=SURFACE_ALT,
                     anchor="w",
-                    font=(FONT, 8),
-                    width=28,
-                    padx=10,
-                    pady=2,
-                ).pack(fill=X)
+                    font=(FONT, 9),
+                )
+                artist_label.pack(fill=X, pady=(3, 0))
 
-            remaining = len(queue) - 8
-            if remaining > 0:
-                Label(
-                    queue_results,
-                    text=f"+ {remaining} more tracks",
-                    fg=TEXT_MUTED,
-                    bg=SURFACE,
-                    font=(FONT, 8),
-                    padx=10,
-                    pady=6,
-                ).pack(fill=X)
+                bind_queue_drag(
+                    row,
+                    cover_frame,
+                    cover,
+                    info,
+                    name_label,
+                    artist_label,
+                )
+
+                def show_queue_cover(
+                    photo,
+                    label=cover,
+                    expected_queue_id=queued_track.get("queue_id"),
+                ):
+                    if not label.winfo_exists():
+                        return
+
+                    current_queue_ids = {
+                        item.get("queue_id")
+                        for item in get_state().get("spotify_manual_queue", [])
+                    }
+
+                    if expected_queue_id not in current_queue_ids:
+                        return
+
+                    label.config(image=photo if photo is not None else "")
+                    label.image = photo
+
+                get_photo_async(
+                    root,
+                    queued_track.get("image_url"),
+                    (50, 50),
+                    show_queue_cover,
+                )
 
         queue_results.lift()
 

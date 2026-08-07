@@ -28,6 +28,7 @@ def load_search_results(query):
                 "artist": ", ".join([artist.get("name", "") for artist in track.get("artists", [])]),
                 "uri": track.get("uri"),
                 "album_id": track.get("album", {}).get("id"),
+                "album_name": track.get("album", {}).get("name", ""),
                 "image_url": images[0].get("url") if images else None,
                 "duration_ms": track.get("duration_ms", 0)
             })

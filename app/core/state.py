@@ -13,6 +13,7 @@ _state = {
     },
     "next_song": None,
     "queue": [],
+    "spotify_manual_queue": [],
     "screen": "launcher",
     "previous_screen": "home",
     "recent_tracks": [],

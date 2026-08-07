@@ -317,6 +317,26 @@ def search_tracks(query):
 # ----------------------------------------------------
 
 
+def add_to_queue(uri):
+    token = _get_token()
+    device_id = get_device_id()
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    response = requests.post(
+        "https://api.spotify.com/v1/me/player/queue",
+        headers=headers,
+        params={
+            "uri": uri,
+            "device_id": device_id
+        },
+        timeout=REQUEST_TIMEOUT
+    )
+    response.raise_for_status()
+
+
 
 # ------------------ USER PROFILE ACTIONS ------------
 

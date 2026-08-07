@@ -44,12 +44,18 @@ def _load_collection_page(collection_type, reset):
                 "name": track.get("name", ""),
                 "artist": ", ".join([artist.get("name", "") for artist in track.get("artists", [])]),
                 "album_id": album_id or track.get("album", {}).get("id"),
+                "album_name": (
+                    state.get("current_collection_name", "")
+                    if collection_type == "album"
+                    else track.get("album", {}).get("name", "")
+                ),
                 "image_url": (
                     state.get("current_collection_image_url")
                     if collection_type == "album"
                     else images[0]["url"] if images else None
                 ),
-                "uri": track.get("uri")
+                "uri": track.get("uri"),
+                "track_id": track.get("id")
             })
 
         if state.get("current_collection_uri") != collection_uri:

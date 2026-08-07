@@ -6,6 +6,7 @@ from tkinter import font as tkfont
 from app.features.spotify.controllers.home import load_home, load_recently_played
 from app.controller.controller_navigation import go_launcher, go_playlist
 from app.features.spotify.controllers.player import play_selected_track
+from app.features.spotify.controllers.queue import add_to_manual_queue
 from app.features.spotify.controllers.search import load_search_results
 from app.core.state import get_state
 from app.services.image_cache import get_photo_async
@@ -67,6 +68,33 @@ def render_home(root, state, button_style):
     frame = Frame(root, bg=BG)
     card_name_font_spec = (FONT, 9, "bold")
     card_name_font = tkfont.Font(root=root, font=card_name_font_spec)
+    queue_toast_after_id = None
+
+    queue_toast = Label(
+        frame,
+        text="Added to queue",
+        fg=TEXT,
+        bg=ACCENT,
+        font=(FONT, 10, "bold"),
+        padx=14,
+        pady=7,
+    )
+
+    def show_queue_toast():
+        nonlocal queue_toast_after_id
+
+        if queue_toast_after_id is not None:
+            root.after_cancel(queue_toast_after_id)
+
+        queue_toast.place(relx=0.5, rely=0.82, anchor="center")
+        queue_toast.lift()
+
+        def hide_toast():
+            nonlocal queue_toast_after_id
+            queue_toast.place_forget()
+            queue_toast_after_id = None
+
+        queue_toast_after_id = root.after(2000, hide_toast)
 
     header = Frame(frame, bg=BG)
     title_box = Frame(header, bg=BG)
@@ -192,8 +220,11 @@ def render_home(root, state, button_style):
         lambda _event: search_results_canvas.yview_scroll(1, "units"),
     )
     search_dropdown_open = False
+    search_drag_start_x = 0
     search_drag_start_y = 0
     search_dragged = False
+    search_drag_axis = None
+    search_dragged_info_frame = None
 
     def submit_search(query=None):
         nonlocal search_dropdown_open
@@ -329,6 +360,8 @@ def render_home(root, state, button_style):
     home_drag_start_x = 0
     home_drag_start_y = 0
     home_drag_mode = None
+    home_dragged_info_frame = None
+    recent_swipe_targets = {}
 
     def event_is_in_home_content(event):
         if not frame.winfo_ismapped():
@@ -347,11 +380,14 @@ def render_home(root, state, button_style):
 
     def start_home_drag(event):
         nonlocal home_drag_start_x, home_drag_start_y, home_drag_mode
+        nonlocal home_dragged_info_frame
         if not event_is_in_home_content(event):
             return
         home_drag_start_x = event.x_root
         home_drag_start_y = event.y_root
         home_drag_mode = None
+        target = recent_swipe_targets.get(str(event.widget))
+        home_dragged_info_frame = target[0] if target else None
         content_canvas.scan_mark(0, content_canvas_y(event))
 
     def drag_home(event):
@@ -370,6 +406,23 @@ def render_home(root, state, button_style):
                 content_canvas_y(event),
                 gain=1,
             )
+        elif home_drag_mode == "horizontal" and home_dragged_info_frame is not None:
+            if home_dragged_info_frame.winfo_exists():
+                home_dragged_info_frame.pack_configure(
+                    padx=(min(max(dx, 0), 76), 0)
+                )
+
+    def finish_recent_press(event, track_uri, track_data, info_frame):
+        delta_x = event.x_root - home_drag_start_x
+
+        if info_frame.winfo_exists():
+            info_frame.pack_configure(padx=0)
+
+        if home_drag_mode == "horizontal" and delta_x >= 60 and track_uri:
+            add_to_manual_queue(track_data)
+            show_queue_toast()
+        elif home_drag_mode is None and track_uri:
+            play_selected_track(track_uri, track_data=track_data)
 
     root.bind("<ButtonPress-1>", start_home_drag, add="+")
     root.bind("<B1-Motion>", drag_home, add="+")
@@ -530,24 +583,53 @@ def render_home(root, state, button_style):
     def search_canvas_y(event):
         return event.y_root - search_results_canvas.winfo_rooty()
 
-    def start_search_drag(event):
-        nonlocal search_drag_start_y, search_dragged
+    def start_search_drag(event, info_frame=None):
+        nonlocal search_drag_start_x, search_drag_start_y, search_dragged
+        nonlocal search_drag_axis, search_dragged_info_frame
+        search_drag_start_x = event.x_root
         search_drag_start_y = event.y_root
         search_dragged = False
+        search_drag_axis = None
+        search_dragged_info_frame = info_frame
         search_results_canvas.scan_mark(0, search_canvas_y(event))
 
     def drag_search_results(event):
-        nonlocal search_dragged
-        if abs(event.y_root - search_drag_start_y) > 5:
-            search_dragged = True
-        search_results_canvas.scan_dragto(0, search_canvas_y(event), gain=1)
+        nonlocal search_dragged, search_drag_axis
+        delta_x = event.x_root - search_drag_start_x
+        delta_y = event.y_root - search_drag_start_y
 
-    def finish_search_press(_event, uri, track_data):
-        if search_dragged or not uri:
+        if search_drag_axis is None and max(abs(delta_x), abs(delta_y)) > 6:
+            search_dragged = True
+            search_drag_axis = (
+                "horizontal" if abs(delta_x) > abs(delta_y) else "vertical"
+            )
+
+        if search_drag_axis == "horizontal":
+            if (
+                search_dragged_info_frame is not None
+                and search_dragged_info_frame.winfo_exists()
+            ):
+                search_dragged_info_frame.pack_configure(
+                    padx=(min(max(delta_x, 0), 76), 0)
+                )
             return
-        close_search()
-        root.after_idle(frame.focus_set)
-        play_selected_track(uri, track_data=track_data)
+
+        if search_drag_axis == "vertical":
+            search_results_canvas.scan_dragto(0, search_canvas_y(event), gain=1)
+
+    def finish_search_press(event, uri, track_data, info_frame):
+        delta_x = event.x_root - search_drag_start_x
+
+        if info_frame.winfo_exists():
+            info_frame.pack_configure(padx=0)
+
+        if search_drag_axis == "horizontal" and delta_x >= 60 and uri:
+            add_to_manual_queue(track_data)
+            show_queue_toast()
+        elif not search_dragged and uri:
+            close_search()
+            root.after_idle(frame.focus_set)
+            play_selected_track(uri, track_data=track_data)
 
     for widget in (search_results_canvas, search_results_list):
         widget.bind("<ButtonPress-1>", start_search_drag)
@@ -664,15 +746,22 @@ def render_home(root, state, button_style):
                         name_label,
                         artist_label,
                     ):
-                        widget.bind("<ButtonPress-1>", start_search_drag)
+                        widget.bind(
+                            "<ButtonPress-1>",
+                            lambda event, swipe_frame=text_box: (
+                                start_search_drag(event, swipe_frame)
+                            ),
+                        )
                         widget.bind("<B1-Motion>", drag_search_results)
                         widget.bind(
                             "<ButtonRelease-1>",
-                            lambda event, selected_uri=uri, selected_track=track: (
+                            lambda event, selected_uri=uri, selected_track=track,
+                            swipe_frame=text_box: (
                                 finish_search_press(
                                     event,
                                     selected_uri,
                                     selected_track,
+                                    swipe_frame,
                                 )
                             )
                         )
@@ -723,6 +812,7 @@ def render_home(root, state, button_style):
         )
         if new_recent_signature != recent_signature:
             recent_signature = new_recent_signature
+            recent_swipe_targets.clear()
             for child in recent_frame.winfo_children():
                 child.destroy()
 
@@ -795,13 +885,17 @@ def render_home(root, state, button_style):
                         name_label,
                         artist_label,
                     ):
+                        recent_swipe_targets[str(widget)] = (text_box, track)
                         widget.bind(
                             "<ButtonRelease-1>",
-                            lambda _event, selected_uri=uri, selected_track=track: (
-                                play_selected_track(selected_uri, 
-                                track_data=selected_track)
-                                if selected_uri and home_drag_mode != "vertical"
-                                else None
+                            lambda event, selected_uri=uri, selected_track=track,
+                            swipe_frame=text_box: (
+                                finish_recent_press(
+                                    event,
+                                    selected_uri,
+                                    selected_track,
+                                    swipe_frame,
+                                )
                             ),
                         )
 

@@ -5,6 +5,7 @@ from app.ui.screens.player_screen import render_player
 from app.features.spotify.screens.home_screen import render_home
 from app.features.spotify.screens.collection_screen import render_playlist
 from app.features.local_audio.screens.library_screen import render_local_library
+from app.controller.controller_queue import update_queue
 from app.ui.theme import SURFACE_ALT, SURFACE_ACTIVE, TEXT, FONT
 
 
@@ -73,4 +74,13 @@ def start_ui(root):
         current["update"](state)
         root.after(100, render)
 
+    def queue_tick():
+        try:
+            update_queue()
+        except Exception as error:
+            print(f"[QUEUE TICK ERROR] {error}")
+
+        root.after(500, queue_tick)
+
+    queue_tick()
     render()

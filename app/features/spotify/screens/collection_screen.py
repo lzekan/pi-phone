@@ -9,6 +9,7 @@ from app.features.spotify.controllers.collection import (
     load_more_collection,
     load_playlist,
 )
+from app.features.spotify.controllers.queue import add_to_manual_queue
 from app.core.state import get_state
 from app.services.image_cache import get_photo_async
 from app.ui.components.mini_player import create_mini_player
@@ -21,7 +22,6 @@ from app.ui.theme import (
     FONT,
     PAGE_PAD,
     SURFACE,
-    SURFACE_ACTIVE,
     SURFACE_ALT,
     TEXT,
     TEXT_DIM,
@@ -37,13 +37,6 @@ def render_playlist(root, state, button_style):
         command=go_home,
         **button_style,
     ).pack(side=LEFT)
-    Label(
-        header,
-        text="Collection",
-        fg=TEXT,
-        bg=BG,
-        font=(FONT, 17, "bold"),
-    ).pack(side=LEFT, padx=12)
     header.pack(fill=X, padx=PAGE_PAD, pady=(10, 6))
 
     collection_hero = Frame(
@@ -126,9 +119,43 @@ def render_playlist(root, state, button_style):
     rendered_collection_key = None
     rendered_track_count = 0
     placeholder_visible = False
+    drag_start_x = 0
     drag_start_y = 0
     tracks_dragged = False
+    drag_axis = None
+    dragged_info_frame = None
+    queue_toast_after_id = None
     collection_cover_key = None
+
+    queue_toast = Label(
+        frame,
+        text="Added to queue",
+        fg=TEXT,
+        bg=ACCENT,
+        font=(FONT, 10, "bold"),
+        padx=14,
+        pady=7,
+    )
+
+    def show_queue_toast():
+        nonlocal queue_toast_after_id
+
+        if queue_toast_after_id is not None:
+            root.after_cancel(queue_toast_after_id)
+
+        queue_toast.place(relx=0.5, rely=0.82, anchor="center")
+        queue_toast.lift()
+
+        def hide_toast():
+            nonlocal queue_toast_after_id
+            queue_toast.place_forget()
+            queue_toast_after_id = None
+
+        queue_toast_after_id = root.after(2000, hide_toast)
+
+    def ellipsize(value, limit):
+        value = value or ""
+        return value if len(value) <= limit else value[:limit - 1].rstrip() + "…"
 
     def load_visible_covers():
         if not tracks_canvas.winfo_exists():
@@ -197,21 +224,46 @@ def render_playlist(root, state, button_style):
     def tracks_canvas_y(event):
         return event.y_root - tracks_canvas.winfo_rooty()
 
-    def start_tracks_drag(event):
-        nonlocal drag_start_y, tracks_dragged
+    def start_tracks_drag(event, info_frame=None):
+        nonlocal drag_start_x, drag_start_y, tracks_dragged
+        nonlocal drag_axis, dragged_info_frame
+        drag_start_x = event.x_root
         drag_start_y = event.y_root
         tracks_dragged = False
+        drag_axis = None
+        dragged_info_frame = info_frame
         tracks_canvas.scan_mark(0, tracks_canvas_y(event))
 
     def drag_tracks(event):
-        nonlocal tracks_dragged
-        if abs(event.y_root - drag_start_y) > 5:
-            tracks_dragged = True
-        tracks_canvas.scan_dragto(0, tracks_canvas_y(event), gain=1)
-        schedule_visible_covers()
+        nonlocal tracks_dragged, drag_axis
+        delta_x = event.x_root - drag_start_x
+        delta_y = event.y_root - drag_start_y
 
-    def finish_track_press(_event, track_uri, collection_uri, track_data):
-        if not tracks_dragged and track_uri:
+        if drag_axis is None and max(abs(delta_x), abs(delta_y)) > 6:
+            drag_axis = "horizontal" if abs(delta_x) > abs(delta_y) else "vertical"
+            tracks_dragged = True
+
+        if drag_axis == "horizontal":
+            if dragged_info_frame is not None and dragged_info_frame.winfo_exists():
+                dragged_info_frame.pack_configure(padx=(min(max(delta_x, 0), 76), 0))
+            return
+
+        if drag_axis == "vertical":
+            tracks_canvas.scan_dragto(0, tracks_canvas_y(event), gain=1)
+            schedule_visible_covers()
+
+    def finish_track_press(event, track_uri, collection_uri, track_data):
+        nonlocal dragged_info_frame
+        delta_x = event.x_root - drag_start_x
+
+        if dragged_info_frame is not None and dragged_info_frame.winfo_exists():
+            dragged_info_frame.pack_configure(padx=0)
+        dragged_info_frame = None
+
+        if drag_axis == "horizontal" and delta_x >= 60 and track_uri:
+            add_to_manual_queue(track_data)
+            show_queue_toast()
+        elif not tracks_dragged and track_uri:
             play_selected_track(
                 track_uri,
                 collection_uri,
@@ -321,17 +373,17 @@ def render_playlist(root, state, button_style):
                 text=str(index) if is_album else "",
                 fg=TEXT_DIM,
                 bg=SURFACE_ALT,
-                font=(FONT, 12, "bold"),
+                font=(FONT, 10, "bold"),
                 borderwidth=0,
                 highlightthickness=0,
             )
             image_label.pack(fill=BOTH, expand=True)
 
             info_frame = Frame(track_frame, bg=CARD)
-            info_frame.pack(side=LEFT, fill=BOTH, expand=True, pady=9)
+            info_frame.pack(side=LEFT, fill=X, expand=True)
             name_label = Label(
                 info_frame,
-                text=track.get("name", ""),
+                text=ellipsize(track.get("name", ""), 36),
                 fg=TEXT,
                 bg=CARD,
                 anchor="w",
@@ -339,7 +391,7 @@ def render_playlist(root, state, button_style):
             )
             artist_label = Label(
                 info_frame,
-                text=track.get("artist", ""),
+                text=ellipsize(track.get("artist", ""), 42),
                 fg=TEXT_MUTED,
                 bg=CARD,
                 anchor="w",
@@ -347,14 +399,6 @@ def render_playlist(root, state, button_style):
             )
             name_label.pack(fill=X)
             artist_label.pack(fill=X)
-            action_label = Label(
-                track_frame,
-                text="›",
-                fg=TEXT_DIM,
-                bg=CARD,
-                font=(FONT, 20),
-            )
-            action_label.pack(side=RIGHT, padx=10)
 
             track_uri = track.get("uri")
             for widget in (
@@ -363,11 +407,15 @@ def render_playlist(root, state, button_style):
                 image_label,
                 info_frame,
                 name_label,
-                artist_label,
-                action_label,
+                artist_label
             ):
                 widget.config(cursor="hand2")
-                widget.bind("<ButtonPress-1>", start_tracks_drag)
+                widget.bind(
+                    "<ButtonPress-1>",
+                    lambda event, swipe_frame=info_frame: (
+                        start_tracks_drag(event, swipe_frame)
+                    ),
+                )
                 widget.bind("<B1-Motion>", drag_tracks)
                 widget.bind(
                     "<ButtonRelease-1>",
