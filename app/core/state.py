@@ -33,6 +33,7 @@ _state = {
     "collection_loading": False,
     "current_collection_image_url": "",
     "search_query": "",
+    "search_type": "track",
     "search_results": [],
     "search_loading": False,
     "search_error": None,

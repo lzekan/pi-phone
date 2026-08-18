@@ -157,7 +157,12 @@ def render_home(root, state, button_style):
     )
     search_icon.pack(side=LEFT)
 
-    search_placeholder = "Search tracks..."
+    search_type_labels = {
+        "track": "Tracks",
+        "album": "Albums",
+    }
+    search_type = state.get("search_type", "track")
+    search_placeholder = f"Search {search_type_labels[search_type].lower()}..."
     search_has_placeholder = True
     search_entry = Entry(
         search_box,
@@ -171,6 +176,22 @@ def render_home(root, state, button_style):
     )
     search_entry.insert(0, search_placeholder)
     search_entry.pack(side=LEFT, fill=X, expand=True, padx=(0, 14), pady=12)
+    filter_button = Button(
+        search_box,
+        text=f"{search_type_labels[search_type]}  ▾",
+        fg=TEXT,
+        bg=SURFACE,
+        activeforeground=TEXT,
+        activebackground=SURFACE_ACTIVE,
+        font=(FONT, 10, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        padx=10,
+        pady=7,
+    )
+    filter_button.pack(side=RIGHT, padx=(0, 7), pady=7)
     virtual_keyboard = VirtualKeyboard(frame)
     search_results_box = Frame(
         frame,
@@ -198,6 +219,12 @@ def render_home(root, state, button_style):
     search_results_canvas.configure(yscrollcommand=search_results_scroll.set)
     search_results_canvas.pack(side=LEFT, fill=BOTH, expand=True)
     search_results_scroll.pack(side=RIGHT, fill="y")
+    filter_menu = Frame(
+        frame,
+        bg=SURFACE,
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
+    )
     search_results_list.bind(
         "<Configure>",
         lambda _event: search_results_canvas.configure(
@@ -235,12 +262,78 @@ def render_home(root, state, button_style):
 
         current_state = get_state()
         current_state["search_query"] = query
+        current_state["search_type"] = search_type
         current_state["search_results"] = []
         current_state["search_loading"] = True
         current_state["search_error"] = None
         search_dropdown_open = True
         virtual_keyboard.hide()
-        Thread(target=load_search_results, args=(query,), daemon=True).start()
+        Thread(
+            target=load_search_results,
+            args=(query, search_type),
+            daemon=True,
+        ).start()
+
+    def close_filter_menu():
+        filter_menu.place_forget()
+
+    def select_search_type(selected_type):
+        nonlocal search_type, search_placeholder, search_has_placeholder
+
+        search_type = selected_type
+        get_state()["search_type"] = selected_type
+        search_placeholder = (
+            f"Search {search_type_labels[selected_type].lower()}..."
+        )
+        filter_button.config(text=f"{search_type_labels[selected_type]}  ▾")
+        close_filter_menu()
+
+        if search_has_placeholder:
+            search_entry.delete(0, "end")
+            search_entry.insert(0, search_placeholder)
+
+        query = search_entry.get().strip()
+        if not search_has_placeholder and len(query) >= 3:
+            submit_search(query)
+
+    def toggle_filter_menu():
+        if filter_menu.winfo_manager():
+            close_filter_menu()
+            return
+
+        root.update_idletasks()
+        menu_width = 142
+        filter_menu.place(
+            x=(
+                search_box.winfo_x()
+                + search_box.winfo_width()
+                - menu_width
+            ),
+            y=search_box.winfo_y() + search_box.winfo_height(),
+            width=menu_width,
+        )
+        filter_menu.lift()
+
+    for option_type in ("track", "album"):
+        Button(
+            filter_menu,
+            text=search_type_labels[option_type],
+            command=lambda selected=option_type: select_search_type(selected),
+            fg=TEXT,
+            bg=SURFACE,
+            activeforeground=TEXT,
+            activebackground=SURFACE_ACTIVE,
+            font=(FONT, 10, "bold"),
+            anchor="w",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            takefocus=False,
+            padx=12,
+            pady=9,
+        ).pack(fill=X)
+
+    filter_button.config(command=toggle_filter_menu)
 
     def focus_search(_event):
         nonlocal search_has_placeholder
@@ -276,6 +369,7 @@ def render_home(root, state, button_style):
     def close_search(_event=None):
         nonlocal search_dropdown_open
         search_dropdown_open = False
+        close_filter_menu()
         virtual_keyboard.hide()
         search_results_box.place_forget()
         reset_search_style()
@@ -291,6 +385,7 @@ def render_home(root, state, button_style):
         widget_path = str(event.widget)
         keyboard_path = str(virtual_keyboard.frame)
         results_path = str(search_results_box)
+        filter_path = str(filter_menu)
         clicked_keyboard = (
             widget_path == keyboard_path
             or widget_path.startswith(f"{keyboard_path}.")
@@ -299,10 +394,16 @@ def render_home(root, state, button_style):
             widget_path == results_path
             or widget_path.startswith(f"{results_path}.")
         )
+        clicked_filter = (
+            event.widget == filter_button
+            or widget_path == filter_path
+            or widget_path.startswith(f"{filter_path}.")
+        )
         if (
             event.widget in (search_entry, search_icon)
             or clicked_keyboard
             or clicked_results
+            or clicked_filter
         ):
             return
 
@@ -617,19 +718,37 @@ def render_home(root, state, button_style):
         if search_drag_axis == "vertical":
             search_results_canvas.scan_dragto(0, search_canvas_y(event), gain=1)
 
-    def finish_search_press(event, uri, track_data, info_frame):
+    def finish_search_press(event, uri, result_data, info_frame):
         delta_x = event.x_root - search_drag_start_x
 
-        if info_frame.winfo_exists():
+        if info_frame is not None and info_frame.winfo_exists():
             info_frame.pack_configure(padx=0)
 
-        if search_drag_axis == "horizontal" and delta_x >= 60 and uri:
-            add_to_manual_queue(track_data)
+        result_type = result_data.get("result_type", "track")
+        if (
+            result_type == "track"
+            and search_drag_axis == "horizontal"
+            and delta_x >= 60
+            and uri
+        ):
+            add_to_manual_queue(result_data)
             show_queue_toast()
         elif not search_dragged and uri:
             close_search()
             root.after_idle(frame.focus_set)
-            play_selected_track(uri, track_data=track_data)
+            if result_type == "track":
+                play_selected_track(uri, track_data=result_data)
+            else:
+                current_state = get_state()
+                current_state["current_collection_type"] = result_type
+                current_state["current_collection_uri"] = uri
+                current_state["current_collection_name"] = result_data.get(
+                    "name", ""
+                )
+                current_state["current_collection_image_url"] = result_data.get(
+                    "image_url"
+                )
+                go_playlist()
 
     for widget in (search_results_canvas, search_results_list):
         widget.bind("<ButtonPress-1>", start_search_drag)
@@ -643,8 +762,10 @@ def render_home(root, state, button_style):
             search_dropdown_open,
             current_state.get("search_loading"),
             current_state.get("search_error"),
+            current_state.get("search_type"),
             tuple(
                 (
+                    track.get("result_type"),
                     track.get("uri"),
                     track.get("name"),
                     track.get("artist"),
@@ -748,7 +869,11 @@ def render_home(root, state, button_style):
                     ):
                         widget.bind(
                             "<ButtonPress-1>",
-                            lambda event, swipe_frame=text_box: (
+                            lambda event, swipe_frame=(
+                                text_box
+                                if track.get("result_type") == "track"
+                                else None
+                            ): (
                                 start_search_drag(event, swipe_frame)
                             ),
                         )

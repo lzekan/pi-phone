@@ -292,7 +292,10 @@ def get_album_tracks(album_id, limit=10, offset=0):
 
 # ---------------- SEARCH ACTIONS --------------------
 
-def search_tracks(query):
+def search_items(query, search_type="track"):
+    if search_type not in ("track", "album"):
+        raise ValueError(f"Unsupported search type: {search_type}")
+
     token = _get_token()
     headers = {
         "Authorization": f"Bearer {token}"
@@ -303,7 +306,7 @@ def search_tracks(query):
         headers=headers,
         params={
             "q": query,
-            "type": "track",
+            "type": search_type,
             "limit": 10
         },
         timeout=REQUEST_TIMEOUT
@@ -311,7 +314,8 @@ def search_tracks(query):
 
     response.raise_for_status()
 
-    return response.json().get("tracks", {}).get("items", [])
+    result_key = f"{search_type}s"
+    return response.json().get(result_key, {}).get("items", [])
 
 
 # ----------------------------------------------------
