@@ -4,8 +4,8 @@ from threading import Lock
 
 from app.core.config import DEVICE_SETTINGS_FILE
 
-
 DEFAULT_MAXIMUM_VOLUME = 100
+DEFAULT_BRIGHTNESS = 100
 
 _settings_lock = Lock()
 
@@ -50,6 +50,28 @@ def set_maximum_volume(value):
     with _settings_lock:
         settings = _read_settings_unlocked()
         settings["maximum_volume"] = value
+        _write_settings_unlocked(settings)
+
+    return value
+
+def get_brightness():
+    with _settings_lock:
+        settings = _read_settings_unlocked()
+
+    try:
+        value = int(settings.get("brightness", DEFAULT_BRIGHTNESS))
+    except (TypeError, ValueError):
+        value = DEFAULT_BRIGHTNESS
+
+    return max(10, min(100, value))
+
+
+def set_brightness(value):
+    value = max(10, min(100, int(value)))
+
+    with _settings_lock:
+        settings = _read_settings_unlocked()
+        settings["brightness"] = value
         _write_settings_unlocked(settings)
 
     return value

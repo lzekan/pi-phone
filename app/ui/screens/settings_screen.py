@@ -4,6 +4,10 @@ from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_launcher
 from app.services import audio_output_service, settings_service
+from app.controller.controller_brightness import (
+    preview_brightness,
+    save_brightness,
+)
 from app.ui.theme import (
     ACCENT,
     ACCENT_ACTIVE,
@@ -69,6 +73,9 @@ def render_settings(root, _state):
     maximum_value_label = None
     maximum_row_widgets = ()
     maximum_pending = settings_service.get_maximum_volume()
+    brightness_value_label = None
+    brightness_row_widgets = ()
+    brightness_pending = settings_service.get_brightness()
 
     header = Frame(frame, bg=BG)
     header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
@@ -262,6 +269,10 @@ def render_settings(root, _state):
             elif title == "Maximum volume":
                 maximum_row_widgets = row_widgets
                 maximum_value_label = value_label
+            elif title == "Brightness":
+                brightness_row_widgets = row_widgets
+                brightness_value_label = value_label
+                brightness_value_label.config(text=f"{brightness_pending}%")
 
     Label(
         content,
@@ -687,6 +698,238 @@ def render_settings(root, _state):
         maximum_panel.update_idletasks()
         update_maximum_preview(maximum_pending)
 
+    brightness_panel = Frame(frame, bg=BG)
+
+    brightness_header = Frame(brightness_panel, bg=BG)
+    brightness_header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
+
+    Button(
+        brightness_header,
+        text="‹",
+        command=lambda: close_brightness_panel(),
+        fg=TEXT,
+        bg=SURFACE_ALT,
+        activeforeground=TEXT,
+        activebackground=CARD,
+        font=(FONT, 22, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        width=3,
+        pady=0,
+    ).pack(side=LEFT)
+
+    brightness_heading = Frame(brightness_header, bg=BG)
+    brightness_heading.pack(side=LEFT, padx=(12, 0))
+
+    Label(
+        brightness_heading,
+        text="DISPLAY",
+        fg=ACCENT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 9, "bold"),
+    ).pack(fill=X)
+
+    Label(
+        brightness_heading,
+        text="Brightness",
+        fg=TEXT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 22, "bold"),
+    ).pack(fill=X)
+
+    brightness_body = Frame(brightness_panel, bg=BG)
+    brightness_body.pack(
+        fill=BOTH,
+        expand=True,
+        padx=PAGE_PAD,
+        pady=(14, 18),
+    )
+
+    brightness_percentage = Label(
+        brightness_body,
+        text=f"{brightness_pending}%",
+        fg=TEXT,
+        bg=BG,
+        font=(FONT, 42, "bold"),
+    )
+    brightness_percentage.pack(fill=X)
+
+    brightness_slider = Canvas(
+        brightness_body,
+        height=86,
+        bg=BG,
+        highlightthickness=0,
+        borderwidth=0,
+        cursor="hand2",
+    )
+    brightness_slider.pack(fill=X, pady=(8, 4))
+
+    brightness_status = Label(
+        brightness_body,
+        text="",
+        fg=TEXT_MUTED,
+        bg=BG,
+        font=(FONT, 9),
+    )
+    brightness_status.pack(fill=X, pady=(0, 10))
+
+    brightness_save = Button(
+        brightness_body,
+        text="Save brightness",
+        fg=BG,
+        bg=ACCENT,
+        activeforeground=BG,
+        activebackground=ACCENT_ACTIVE,
+        font=(FONT, 11, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        padx=16,
+        pady=12,
+    )
+    brightness_save.pack(fill=X)
+
+    def draw_brightness_slider():
+        width = max(40, brightness_slider.winfo_width())
+        left = 20
+        right = width - 20
+        center_y = 42
+
+        ratio = (brightness_pending - 10) / 90
+        knob_x = left + (right - left) * ratio
+
+        brightness_slider.delete("all")
+
+        brightness_slider.create_line(
+            left,
+            center_y,
+            right,
+            center_y,
+            fill=DIVIDER,
+            width=8,
+            capstyle="round",
+        )
+
+        brightness_slider.create_line(
+            left,
+            center_y,
+            knob_x,
+            center_y,
+            fill=ACCENT,
+            width=8,
+            capstyle="round",
+        )
+
+        brightness_slider.create_oval(
+            knob_x - 13,
+            center_y - 13,
+            knob_x + 13,
+            center_y + 13,
+            fill=TEXT,
+            outline=ACCENT,
+            width=4,
+        )
+
+    def update_brightness_preview(value):
+        nonlocal brightness_pending
+
+        brightness_pending = max(10, min(100, int(value)))
+        brightness_percentage.config(text=f"{brightness_pending}%")
+        draw_brightness_slider()
+
+        try:
+            preview_brightness(brightness_pending)
+            brightness_status.config(text="", fg=TEXT_MUTED)
+        except OSError as error:
+            brightness_status.config(text=str(error), fg=DANGER)
+
+    def set_brightness_from_pointer(event):
+        width = max(40, brightness_slider.winfo_width())
+        ratio = min(
+            max((event.x - 20) / max(1, width - 40), 0),
+            1,
+        )
+
+        value = round((10 + ratio * 90) / 5) * 5
+        update_brightness_preview(value)
+
+    brightness_slider.bind(
+        "<Button-1>",
+        set_brightness_from_pointer,
+    )
+    brightness_slider.bind(
+        "<B1-Motion>",
+        set_brightness_from_pointer,
+    )
+    brightness_slider.bind(
+        "<Configure>",
+        lambda _event: draw_brightness_slider(),
+    )
+
+    def close_brightness_panel():
+        nonlocal brightness_pending
+
+        saved_value = settings_service.get_brightness()
+        brightness_pending = saved_value
+
+        try:
+            preview_brightness(saved_value)
+        except OSError as error:
+            print(f"[BRIGHTNESS ERROR] {error}")
+
+        brightness_panel.place_forget()
+
+    def save_current_brightness():
+        nonlocal brightness_pending
+
+        brightness_save.config(state="disabled")
+        brightness_status.config(text="Saving...", fg=TEXT_MUTED)
+
+        try:
+            saved_value = save_brightness(brightness_pending)
+        except (OSError, ValueError) as error:
+            brightness_status.config(text=str(error), fg=DANGER)
+            brightness_save.config(state=NORMAL)
+            return
+
+        brightness_pending = saved_value
+        brightness_value_label.config(text=f"{saved_value}%")
+        brightness_status.config(
+            text="Brightness saved",
+            fg=ACCENT,
+        )
+        brightness_save.config(state=NORMAL)
+
+    def open_brightness_panel():
+        nonlocal brightness_pending
+
+        close_output_panel()
+        maximum_panel.place_forget()
+
+        brightness_pending = settings_service.get_brightness()
+        brightness_status.config(text="", fg=TEXT_MUTED)
+
+        brightness_panel.place(
+            x=0,
+            y=0,
+            relwidth=1,
+            relheight=1,
+        )
+        brightness_panel.lift()
+        brightness_panel.update_idletasks()
+
+        brightness_percentage.config(
+            text=f"{brightness_pending}%"
+        )
+        draw_brightness_slider()
+
+    brightness_save.config(command=save_current_brightness)
+
     drag_start_y = 0
 
     def start_drag(event):
@@ -713,6 +956,10 @@ def render_settings(root, _state):
         if abs(event.y_root - drag_start_y) <= 4:
             open_maximum_panel()
 
+    def finish_brightness_press(event):
+        if abs(event.y_root - drag_start_y) <= 4:
+            open_brightness_panel()
+
     def bind_scroll(widget):
         widget.bind("<ButtonPress-1>", start_drag)
         widget.bind("<B1-Motion>", drag)
@@ -733,14 +980,28 @@ def render_settings(root, _state):
         widget.config(cursor="hand2")
         widget.bind("<ButtonRelease-1>", finish_maximum_press)
 
+    for widget in brightness_row_widgets:
+        widget.config(cursor="hand2")
+        widget.bind(
+            "<ButtonRelease-1>",
+            finish_brightness_press,
+        )
+
     def on_show():
         close_output_panel()
         maximum_panel.place_forget()
+        brightness_panel.place_forget()
         canvas.yview_moveto(0)
         if maximum_value_label is not None and maximum_value_label.winfo_exists():
             maximum_value_label.config(
                 text=f"{settings_service.get_maximum_volume()}%"
             )
+
+        if (brightness_value_label is not None and brightness_value_label.winfo_exists()):
+            brightness_value_label.config(
+                text=f"{settings_service.get_brightness()}%"
+            )
+
         load_output_devices()
 
     return {

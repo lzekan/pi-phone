@@ -7,6 +7,7 @@ from app.features.spotify.screens.home_screen import render_home
 from app.features.spotify.screens.collection_screen import render_playlist
 from app.features.local_audio.screens.library_screen import render_local_library
 from app.controller.controller_queue import update_queue
+from app.controller.controller_brightness import apply_saved_brightness
 from app.ui.theme import SURFACE_ALT, SURFACE_ACTIVE, TEXT, FONT
 
 
@@ -28,8 +29,14 @@ BUTTON_STYLE = {
 
 def start_ui(root):
     go_launcher()
+
     root.title("Pi Phone")
     root.attributes("-fullscreen", True)
+
+    try:
+        apply_saved_brightness()
+    except (OSError, ValueError) as error:
+        print(f"[BRIGHTNESS ERROR] {error}")
 
     screens = {
         "home": render_home(root, get_state(), BUTTON_STYLE),
