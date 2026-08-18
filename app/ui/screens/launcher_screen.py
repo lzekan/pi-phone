@@ -1,9 +1,12 @@
 from datetime import datetime
+from queue import Empty, Queue
+from threading import Thread
 from tkinter import BOTH, LEFT, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_home
 from app.features.local_audio.controller import open_library
+from app.services.battery_service import get_battery_status
 from app.ui.theme import (
     ACCENT,
     BG,
@@ -21,6 +24,7 @@ from app.ui.theme import (
 
 def render_launcher(root, _state):
     frame = Frame(root, bg=BG)
+    battery_results = Queue()
 
     header = Frame(frame, bg=BG)
     header.pack(fill=X, padx=PAGE_PAD, pady=(24, 8))
@@ -34,8 +38,33 @@ def render_launcher(root, _state):
         anchor="w",
         font=(FONT, 10, "bold"),
     ).pack(side=LEFT)
+
+    header_actions = Frame(header_top, bg=BG)
+    header_actions.pack(side=RIGHT)
+
+    battery_box = Frame(header_actions, bg=BG)
+    battery_box.pack(side=LEFT, padx=(0, 10))
+    battery_percentage = Label(
+        battery_box,
+        text="BAT --%",
+        fg=TEXT,
+        bg=BG,
+        anchor="e",
+        font=(FONT, 11, "bold"),
+    )
+    battery_percentage.pack()
+    battery_status = Label(
+        battery_box,
+        text="Checking...",
+        fg=TEXT_DIM,
+        bg=BG,
+        anchor="e",
+        font=(FONT, 8),
+    )
+    battery_status.pack()
+
     Button(
-        header_top,
+        header_actions,
         text="⏻",
         command=root.destroy,
         fg=TEXT_MUTED,
@@ -224,7 +253,57 @@ def render_launcher(root, _state):
         date_label.config(text=now.strftime("%d.%m.%Y"))
         root.after(1000, update_clock)
 
+    def update_battery_labels(status):
+        if not frame.winfo_exists():
+            return
+
+        if status is None:
+            battery_percentage.config(text="BAT --%", fg=TEXT_MUTED)
+            battery_status.config(text="Unavailable", fg=DANGER)
+            return
+
+        percentage = status["percentage"]
+        if status["charging"]:
+            status_text = "Charging"
+            status_color = ACCENT
+        elif status["power_plugged"]:
+            status_text = "Plugged in"
+            status_color = ACCENT
+        else:
+            status_text = "On battery"
+            status_color = TEXT_DIM
+
+        battery_percentage.config(text=f"BAT {percentage}%", fg=TEXT)
+        battery_status.config(text=status_text, fg=status_color)
+
+    def refresh_battery():
+        def load():
+            try:
+                status = get_battery_status()
+            except (OSError, ValueError, KeyError):
+                status = None
+
+            battery_results.put(status)
+
+        Thread(target=load, daemon=True).start()
+
+    def poll_battery_result():
+        if not frame.winfo_exists():
+            return
+
+        try:
+            status = battery_results.get_nowait()
+        except Empty:
+            root.after(100, poll_battery_result)
+            return
+
+        update_battery_labels(status)
+        root.after(15000, refresh_battery)
+        root.after(15100, poll_battery_result)
+
     update_clock()
+    refresh_battery()
+    poll_battery_result()
 
     return {
         "frame": frame,
