@@ -27,3 +27,7 @@ def set_brightness_percent(percent):
 
     BRIGHTNESS_FILE.write_text(str(raw_value))
     return percent
+
+
+def turn_off_backlight():
+    BRIGHTNESS_FILE.write_text("0")

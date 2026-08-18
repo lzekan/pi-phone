@@ -8,6 +8,7 @@ from app.controller.controller_brightness import (
     preview_brightness,
     save_brightness,
 )
+from app.controller.controller_screen_timeout import save_screen_timeout
 from app.ui.theme import (
     ACCENT,
     ACCENT_ACTIVE,
@@ -66,6 +67,14 @@ SETTINGS_SECTIONS = (
 )
 
 
+def _format_screen_timeout(seconds):
+    if seconds == 0:
+        return "Never"
+    if seconds < 60:
+        return f"{seconds} sec"
+    return f"{seconds // 60} min"
+
+
 def render_settings(root, _state):
     frame = Frame(root, bg=BG)
     output_value_label = None
@@ -76,6 +85,9 @@ def render_settings(root, _state):
     brightness_value_label = None
     brightness_row_widgets = ()
     brightness_pending = settings_service.get_brightness()
+    timeout_value_label = None
+    timeout_row_widgets = ()
+    timeout_pending = settings_service.get_screen_timeout()
 
     header = Frame(frame, bg=BG)
     header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
@@ -273,6 +285,12 @@ def render_settings(root, _state):
                 brightness_row_widgets = row_widgets
                 brightness_value_label = value_label
                 brightness_value_label.config(text=f"{brightness_pending}%")
+            elif title == "Screen timeout":
+                timeout_row_widgets = row_widgets
+                timeout_value_label = value_label
+                timeout_value_label.config(
+                    text=_format_screen_timeout(timeout_pending)
+                )
 
     Label(
         content,
@@ -910,6 +928,7 @@ def render_settings(root, _state):
 
         close_output_panel()
         maximum_panel.place_forget()
+        timeout_panel.place_forget()
 
         brightness_pending = settings_service.get_brightness()
         brightness_status.config(text="", fg=TEXT_MUTED)
@@ -929,6 +948,107 @@ def render_settings(root, _state):
         draw_brightness_slider()
 
     brightness_save.config(command=save_current_brightness)
+
+    timeout_panel = Frame(frame, bg=BG)
+
+    timeout_header = Frame(timeout_panel, bg=BG)
+    timeout_header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
+
+    Button(
+        timeout_header,
+        text="‹",
+        command=timeout_panel.place_forget,
+        fg=TEXT,
+        bg=SURFACE_ALT,
+        activeforeground=TEXT,
+        activebackground=CARD,
+        font=(FONT, 22, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        width=3,
+        pady=0,
+    ).pack(side=LEFT)
+
+    timeout_heading = Frame(timeout_header, bg=BG)
+    timeout_heading.pack(side=LEFT, padx=(12, 0))
+    Label(
+        timeout_heading,
+        text="DISPLAY",
+        fg=ACCENT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 9, "bold"),
+    ).pack(fill=X)
+    Label(
+        timeout_heading,
+        text="Screen timeout",
+        fg=TEXT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 22, "bold"),
+    ).pack(fill=X)
+
+    timeout_body = Frame(timeout_panel, bg=BG)
+    timeout_body.pack(fill=BOTH, expand=True, padx=PAGE_PAD, pady=(14, 18))
+
+    timeout_choice_buttons = {}
+
+    def refresh_timeout_choices():
+        for seconds, button in timeout_choice_buttons.items():
+            selected = seconds == timeout_pending
+            button.config(
+                fg=BG if selected else TEXT,
+                bg=ACCENT if selected else CARD,
+                activeforeground=BG if selected else TEXT,
+                activebackground=ACCENT_ACTIVE if selected else SURFACE_ACTIVE,
+            )
+
+    def choose_timeout(seconds):
+        nonlocal timeout_pending
+
+        try:
+            timeout_pending = save_screen_timeout(seconds)
+        except (OSError, TypeError, ValueError) as error:
+            print(f"[SCREEN TIMEOUT ERROR] {error}")
+            return
+
+        if timeout_value_label is not None and timeout_value_label.winfo_exists():
+            timeout_value_label.config(
+                text=_format_screen_timeout(timeout_pending)
+            )
+        refresh_timeout_choices()
+
+    for seconds in settings_service.SCREEN_TIMEOUT_OPTIONS:
+        button = Button(
+            timeout_body,
+            text=_format_screen_timeout(seconds),
+            command=lambda value=seconds: choose_timeout(value),
+            fg=TEXT,
+            bg=CARD,
+            activeforeground=TEXT,
+            activebackground=SURFACE_ACTIVE,
+            font=(FONT, 12, "bold"),
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            takefocus=False,
+            pady=13,
+        )
+        button.pack(fill=X, pady=4)
+        timeout_choice_buttons[seconds] = button
+
+    def open_timeout_panel():
+        nonlocal timeout_pending
+
+        close_output_panel()
+        maximum_panel.place_forget()
+        brightness_panel.place_forget()
+        timeout_pending = settings_service.get_screen_timeout()
+        refresh_timeout_choices()
+        timeout_panel.place(x=0, y=0, relwidth=1, relheight=1)
+        timeout_panel.lift()
 
     drag_start_y = 0
 
@@ -960,6 +1080,10 @@ def render_settings(root, _state):
         if abs(event.y_root - drag_start_y) <= 4:
             open_brightness_panel()
 
+    def finish_timeout_press(event):
+        if abs(event.y_root - drag_start_y) <= 4:
+            open_timeout_panel()
+
     def bind_scroll(widget):
         widget.bind("<ButtonPress-1>", start_drag)
         widget.bind("<B1-Motion>", drag)
@@ -987,10 +1111,18 @@ def render_settings(root, _state):
             finish_brightness_press,
         )
 
+    for widget in timeout_row_widgets:
+        widget.config(cursor="hand2")
+        widget.bind(
+            "<ButtonRelease-1>",
+            finish_timeout_press,
+        )
+
     def on_show():
         close_output_panel()
         maximum_panel.place_forget()
         brightness_panel.place_forget()
+        timeout_panel.place_forget()
         canvas.yview_moveto(0)
         if maximum_value_label is not None and maximum_value_label.winfo_exists():
             maximum_value_label.config(
@@ -1000,6 +1132,13 @@ def render_settings(root, _state):
         if (brightness_value_label is not None and brightness_value_label.winfo_exists()):
             brightness_value_label.config(
                 text=f"{settings_service.get_brightness()}%"
+            )
+
+        if timeout_value_label is not None and timeout_value_label.winfo_exists():
+            timeout_value_label.config(
+                text=_format_screen_timeout(
+                    settings_service.get_screen_timeout()
+                )
             )
 
         load_output_devices()

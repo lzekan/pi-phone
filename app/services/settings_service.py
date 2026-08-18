@@ -6,6 +6,8 @@ from app.core.config import DEVICE_SETTINGS_FILE
 
 DEFAULT_MAXIMUM_VOLUME = 100
 DEFAULT_BRIGHTNESS = 100
+DEFAULT_SCREEN_TIMEOUT = 300
+SCREEN_TIMEOUT_OPTIONS = (0, 30, 60, 120, 300)
 
 _settings_lock = Lock()
 
@@ -72,6 +74,33 @@ def set_brightness(value):
     with _settings_lock:
         settings = _read_settings_unlocked()
         settings["brightness"] = value
+        _write_settings_unlocked(settings)
+
+    return value
+
+
+def get_screen_timeout():
+    with _settings_lock:
+        settings = _read_settings_unlocked()
+
+    try:
+        value = int(settings.get("screen_timeout", DEFAULT_SCREEN_TIMEOUT))
+    except (TypeError, ValueError):
+        value = DEFAULT_SCREEN_TIMEOUT
+
+    if value not in SCREEN_TIMEOUT_OPTIONS:
+        return DEFAULT_SCREEN_TIMEOUT
+    return value
+
+
+def set_screen_timeout(value):
+    value = int(value)
+    if value not in SCREEN_TIMEOUT_OPTIONS:
+        raise ValueError("Unsupported screen timeout")
+
+    with _settings_lock:
+        settings = _read_settings_unlocked()
+        settings["screen_timeout"] = value
         _write_settings_unlocked(settings)
 
     return value

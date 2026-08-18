@@ -8,6 +8,7 @@ from app.features.spotify.screens.collection_screen import render_playlist
 from app.features.local_audio.screens.library_screen import render_local_library
 from app.controller.controller_queue import update_queue
 from app.controller.controller_brightness import apply_saved_brightness
+from app.controller.controller_screen_timeout import start_screen_timeout
 from app.ui.theme import SURFACE_ALT, SURFACE_ACTIVE, TEXT, FONT
 
 
@@ -37,6 +38,8 @@ def start_ui(root):
         apply_saved_brightness()
     except (OSError, ValueError) as error:
         print(f"[BRIGHTNESS ERROR] {error}")
+
+    start_screen_timeout(root)
 
     screens = {
         "home": render_home(root, get_state(), BUTTON_STYLE),
