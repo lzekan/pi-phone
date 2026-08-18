@@ -3,7 +3,7 @@ from tkinter import BOTH, LEFT, NORMAL, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_launcher
-from app.services import audio_output_service, settings_service
+from app.services import audio_output_service, device_info_service, settings_service
 from app.controller.controller_brightness import (
     preview_brightness,
     save_brightness,
@@ -59,7 +59,6 @@ SETTINGS_SECTIONS = (
         "System",
         (
             ("IN", "Device information", "PiPhone"),
-            ("UP", "Software update", "Check for updates"),
             ("RS", "Restart", "Restart device"),
             ("PW", "Shutdown", "Power off"),
         ),
@@ -88,6 +87,7 @@ def render_settings(root, _state):
     timeout_value_label = None
     timeout_row_widgets = ()
     timeout_pending = settings_service.get_screen_timeout()
+    information_row_widgets = ()
 
     header = Frame(frame, bg=BG)
     header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
@@ -291,6 +291,8 @@ def render_settings(root, _state):
                 timeout_value_label.config(
                     text=_format_screen_timeout(timeout_pending)
                 )
+            elif title == "Device information":
+                information_row_widgets = row_widgets
 
     Label(
         content,
@@ -1050,6 +1052,165 @@ def render_settings(root, _state):
         timeout_panel.place(x=0, y=0, relwidth=1, relheight=1)
         timeout_panel.lift()
 
+    information_panel = Frame(frame, bg=BG)
+
+    information_header = Frame(information_panel, bg=BG)
+    information_header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
+    Button(
+        information_header,
+        text="‹",
+        command=information_panel.place_forget,
+        fg=TEXT,
+        bg=SURFACE_ALT,
+        activeforeground=TEXT,
+        activebackground=CARD,
+        font=(FONT, 22, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        width=3,
+        pady=0,
+    ).pack(side=LEFT)
+
+    information_heading = Frame(information_header, bg=BG)
+    information_heading.pack(side=LEFT, padx=(12, 0))
+    Label(
+        information_heading,
+        text="SYSTEM",
+        fg=ACCENT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 9, "bold"),
+    ).pack(fill=X)
+    Label(
+        information_heading,
+        text="Device information",
+        fg=TEXT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 22, "bold"),
+    ).pack(fill=X)
+
+    information_canvas = Canvas(
+        information_panel,
+        bg=BG,
+        highlightthickness=0,
+        borderwidth=0,
+    )
+    information_canvas.pack(fill=BOTH, expand=True, padx=PAGE_PAD, pady=(4, 18))
+    information_body = Frame(information_canvas, bg=BG)
+    information_window = information_canvas.create_window(
+        0,
+        0,
+        anchor="nw",
+        window=information_body,
+    )
+    information_body.bind(
+        "<Configure>",
+        lambda _event: information_canvas.configure(
+            scrollregion=information_canvas.bbox("all")
+        ),
+    )
+    information_canvas.bind(
+        "<Configure>",
+        lambda event: information_canvas.itemconfigure(
+            information_window,
+            width=event.width,
+        ),
+    )
+
+    information_drag_start_y = 0
+
+    def start_information_drag(event):
+        nonlocal information_drag_start_y
+        information_drag_start_y = event.y_root
+        information_canvas.scan_mark(
+            0,
+            event.y_root - information_canvas.winfo_rooty(),
+        )
+
+    def drag_information(event):
+        if abs(event.y_root - information_drag_start_y) > 4:
+            information_canvas.scan_dragto(
+                0,
+                event.y_root - information_canvas.winfo_rooty(),
+                gain=1,
+            )
+
+    information_canvas.bind("<ButtonPress-1>", start_information_drag)
+    information_canvas.bind("<B1-Motion>", drag_information)
+
+    def render_device_information(items):
+        if not information_panel.winfo_ismapped():
+            return
+
+        for child in information_body.winfo_children():
+            child.destroy()
+
+        card = Frame(
+            information_body,
+            bg=CARD,
+            highlightbackground=DIVIDER,
+            highlightthickness=1,
+        )
+        card.pack(fill=X)
+
+        for index, (label, value) in enumerate(items):
+            row = Frame(card, bg=CARD)
+            row.pack(fill=X, padx=14, pady=10)
+            Label(
+                row,
+                text=label,
+                fg=TEXT_MUTED,
+                bg=CARD,
+                anchor="w",
+                font=(FONT, 9),
+            ).pack(fill=X)
+            Label(
+                row,
+                text=value,
+                fg=TEXT,
+                bg=CARD,
+                anchor="w",
+                justify="left",
+                wraplength=405,
+                font=(FONT, 11, "bold"),
+            ).pack(fill=X, pady=(2, 0))
+
+            if index != len(items) - 1:
+                Frame(card, bg=DIVIDER, height=1).pack(fill=X, padx=14)
+
+            for widget in (row, *row.winfo_children()):
+                widget.bind("<ButtonPress-1>", start_information_drag)
+                widget.bind("<B1-Motion>", drag_information)
+
+    def open_information_panel():
+        close_output_panel()
+        maximum_panel.place_forget()
+        brightness_panel.place_forget()
+        timeout_panel.place_forget()
+
+        for child in information_body.winfo_children():
+            child.destroy()
+        Label(
+            information_body,
+            text="Loading device information…",
+            fg=TEXT_MUTED,
+            bg=BG,
+            font=(FONT, 11),
+        ).pack(pady=32)
+
+        information_canvas.yview_moveto(0)
+        information_panel.place(x=0, y=0, relwidth=1, relheight=1)
+        information_panel.lift()
+
+        def worker():
+            items = device_info_service.get_device_information()
+            root.after(0, lambda: render_device_information(items))
+
+        Thread(target=worker, daemon=True).start()
+
     drag_start_y = 0
 
     def start_drag(event):
@@ -1083,6 +1244,10 @@ def render_settings(root, _state):
     def finish_timeout_press(event):
         if abs(event.y_root - drag_start_y) <= 4:
             open_timeout_panel()
+
+    def finish_information_press(event):
+        if abs(event.y_root - drag_start_y) <= 4:
+            open_information_panel()
 
     def bind_scroll(widget):
         widget.bind("<ButtonPress-1>", start_drag)
@@ -1118,11 +1283,19 @@ def render_settings(root, _state):
             finish_timeout_press,
         )
 
+    for widget in information_row_widgets:
+        widget.config(cursor="hand2")
+        widget.bind(
+            "<ButtonRelease-1>",
+            finish_information_press,
+        )
+
     def on_show():
         close_output_panel()
         maximum_panel.place_forget()
         brightness_panel.place_forget()
         timeout_panel.place_forget()
+        information_panel.place_forget()
         canvas.yview_moveto(0)
         if maximum_value_label is not None and maximum_value_label.winfo_exists():
             maximum_value_label.config(
