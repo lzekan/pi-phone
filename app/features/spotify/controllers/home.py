@@ -13,6 +13,36 @@ HOME_LOAD_RETRY_DELAY = 1
 RECENT_TRACKS_LIMIT = 5
 
 _recent_tracks_lock = Lock()
+_saved_albums_lock = Lock()
+
+
+def _get_saved_albums():
+    albums = []
+    for item in spotify_service.get_user_albums() or []:
+        album = item.get("album") or item.get("item") or {}
+        images = album.get("images") or []
+        albums.append({
+            "name": album.get("name", ""),
+            "artist": ", ".join(
+                artist.get("name", "")
+                for artist in album.get("artists", [])
+            ),
+            "uri": album.get("uri"),
+            "image_url": images[0]["url"] if images else None,
+        })
+    return albums
+
+
+def load_saved_albums():
+    if not _saved_albums_lock.acquire(blocking=False):
+        return
+
+    try:
+        get_state()["albums"] = _get_saved_albums()
+    except Exception as error:
+        print(f"[SAVED ALBUMS WARN] Spotify library refresh failed: {error}")
+    finally:
+        _saved_albums_lock.release()
 
 
 def load_recently_played():
@@ -99,22 +129,8 @@ def load_home():
                         "image_url": images[0]["url"] if images else None
                     })
 
-                albums = []
-                for item in spotify_service.get_user_albums() or []:
-                    album = item.get("album") or item.get("item") or {}
-                    images = album.get("images") or []
-                    albums.append({
-                        "name": album.get("name", ""),
-                        "artist": ", ".join(
-                            artist.get("name", "")
-                            for artist in album.get("artists", [])
-                        ),
-                        "uri": album.get("uri"),
-                        "image_url": images[0]["url"] if images else None
-                    })
-
                 state["playlists"] = playlists
-                state["albums"] = albums
+                state["albums"] = _get_saved_albums()
                 break
             except (RequestConnectionError, RequestTimeout) as error:
                 if attempt == HOME_LOAD_ATTEMPTS - 1:

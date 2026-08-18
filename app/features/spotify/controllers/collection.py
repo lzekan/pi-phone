@@ -7,6 +7,7 @@ PAGE_SIZE = 10
 _requests_lock = Lock()
 _active_requests = set()
 
+_library_lock = Lock()
 
 def _load_collection_page(collection_type, reset):
     state = get_state()
@@ -88,3 +89,74 @@ def load_more_collection():
     collection_type = get_state().get("current_collection_type")
     if collection_type in ("playlist", "album"):
         _load_collection_page(collection_type, reset=False)
+
+
+def load_album_library_status():
+    state = get_state()
+    collection_uri = state.get("current_collection_uri")
+
+    if (
+        not collection_uri
+        or state.get("current_collection_type") != "album"
+    ):
+        state["current_collection_saved"] = None
+        return
+
+    state["collection_library_loading"] = True
+    state["collection_library_error"] = None
+
+    with _library_lock:
+        try:
+            saved = spotify_service.is_library_item_saved(
+                collection_uri
+            )
+
+            if state.get("current_collection_uri") == collection_uri:
+                state["current_collection_saved"] = saved
+
+        except Exception as error:
+            if state.get("current_collection_uri") == collection_uri:
+                state["collection_library_error"] = str(error)
+
+        finally:
+            if state.get("current_collection_uri") == collection_uri:
+                state["collection_library_loading"] = False
+
+
+def toggle_current_album_saved():
+    state = get_state()
+    collection_uri = state.get("current_collection_uri")
+
+    if (
+        not collection_uri
+        or state.get("current_collection_type") != "album"
+    ):
+        return
+
+    state["collection_library_loading"] = True
+    state["collection_library_error"] = None
+
+    with _library_lock:
+        try:
+            if state.get("current_collection_uri") != collection_uri:
+                return
+
+            was_saved = bool(
+                state.get("current_collection_saved")
+            )
+
+            if was_saved:
+                spotify_service.remove_library_item(collection_uri)
+            else:
+                spotify_service.save_library_item(collection_uri)
+
+            if state.get("current_collection_uri") == collection_uri:
+                state["current_collection_saved"] = not was_saved
+
+        except Exception as error:
+            if state.get("current_collection_uri") == collection_uri:
+                state["collection_library_error"] = str(error)
+
+        finally:
+            if state.get("current_collection_uri") == collection_uri:
+                state["collection_library_loading"] = False

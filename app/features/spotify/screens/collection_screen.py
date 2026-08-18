@@ -6,8 +6,10 @@ from app.controller.controller_navigation import go_home
 from app.features.spotify.controllers.player import play_selected_track
 from app.features.spotify.controllers.collection import (
     load_album,
+    load_album_library_status,
     load_more_collection,
     load_playlist,
+    toggle_current_album_saved,
 )
 from app.features.spotify.controllers.queue import add_to_manual_queue
 from app.core.state import get_state
@@ -94,6 +96,32 @@ def render_playlist(root, state, button_style):
         font=(FONT, 9),
     )
     collection_count_label.pack(fill=X, pady=(8, 0))
+
+    def toggle_album_saved():
+        current_state = get_state()
+        if current_state.get("collection_library_loading"):
+            return
+        current_state["collection_library_loading"] = True
+        Thread(target=toggle_current_album_saved, daemon=True).start()
+
+    album_save_button = Button(
+        collection_hero,
+        text="♡",
+        command=toggle_album_saved,
+        fg=TEXT,
+        bg=SURFACE,
+        activeforeground=ACCENT,
+        activebackground=CARD,
+        disabledforeground=TEXT_MUTED,
+        font=(FONT, 20, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        width=3,
+        pady=2,
+        cursor="hand2",
+    )
 
     tracks_box = Frame(frame, bg=BG)
     tracks_box.pack(fill=BOTH, expand=True)
@@ -506,6 +534,9 @@ def render_playlist(root, state, button_style):
             current_state["current_collection_next_offset"] = None
             current_state["current_collection_total"] = None
             current_state["collection_loading"] = False
+            current_state["current_collection_saved"] = None
+            current_state["collection_library_loading"] = False
+            current_state["collection_library_error"] = None
             tracks_signature = None
 
             target = (
@@ -515,6 +546,34 @@ def render_playlist(root, state, button_style):
             )
 
             Thread(target=target, daemon=True).start()
+
+            if current_state.get("current_collection_type") == "album":
+                current_state["collection_library_loading"] = True
+                Thread(target=load_album_library_status, daemon=True).start()
+
+        if collection_type == "album":
+            album_save_button.place(relx=1, x=-12, y=12, anchor="ne")
+            collection_meta.pack_configure(padx=(0, 58))
+
+            if current_state.get("collection_library_loading"):
+                is_saved = bool(current_state.get("current_collection_saved"))
+                album_save_button.config(
+                    text="♥" if is_saved else "♡",
+                    fg=ACCENT if is_saved else TEXT_MUTED,
+                    state="disabled",
+                    cursor="arrow",
+                )
+            else:
+                is_saved = bool(current_state.get("current_collection_saved"))
+                album_save_button.config(
+                    text="♥" if is_saved else "♡",
+                    fg=ACCENT if is_saved else TEXT,
+                    state="normal",
+                    cursor="hand2",
+                )
+        else:
+            album_save_button.place_forget()
+            collection_meta.pack_configure(padx=(0, 12))
 
         rebuild_tracks(current_state)
         mini_player["update"](current_state)

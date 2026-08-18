@@ -222,6 +222,47 @@ def get_user_albums():
 
     return albums
 
+def is_library_item_saved(uri):
+    token = _get_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = requests.get(
+        "https://api.spotify.com/v1/me/library/contains",
+        headers=headers,
+        params={"uris": uri},
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+
+    results = response.json()
+    return bool(results and results[0])
+
+
+def save_library_item(uri):
+    token = _get_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = requests.put(
+        "https://api.spotify.com/v1/me/library",
+        headers=headers,
+        params={"uris": uri},
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+
+
+def remove_library_item(uri):
+    token = _get_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = requests.delete(
+        "https://api.spotify.com/v1/me/library",
+        headers=headers,
+        params={"uris": uri},
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+
 
 def get_recently_played(limit=15):
     token = _get_token()
