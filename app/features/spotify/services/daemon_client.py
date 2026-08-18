@@ -15,7 +15,7 @@ track_before_change = None
 expected_track_after_change = None
 track_change_start = 0
 
-TRACK_CHANGE_TIMEOUT = 5
+TRACK_CHANGE_TIMEOUT = 15
 TRACK_CHANGE_SETTLE_TIME = 0.35
 SEEK_CONFIRM_TIMEOUT = 5
 SEEK_CONFIRM_TOLERANCE_MS = 1500
