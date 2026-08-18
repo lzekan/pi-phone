@@ -1,5 +1,5 @@
 from tkinter import BOTH, BOTTOM, LEFT, NORMAL, RIGHT, X
-from tkinter import Button, Frame, Label
+from tkinter import Button, Canvas, Frame, Label
 from tkinter import font as tkfont
 
 from app.controller.controller_navigation import go_player
@@ -9,10 +9,9 @@ from app.services.image_cache import get_photo_async
 from app.ui.theme import (
     ACCENT,
     ACCENT_ACTIVE,
-    DIVIDER,
     FONT,
     SURFACE,
-    SURFACE_ALT,
+    SURFACE_ACTIVE,
     TEXT,
     TEXT_DIM,
     TEXT_MUTED,
@@ -29,34 +28,95 @@ def _get_track_id(song):
 
 
 def create_mini_player(root, parent, button_style, before=None):
+    mini_bg = SURFACE_ACTIVE
+    parent_bg = parent.cget("bg")
     frame = Frame(
         parent,
-        bg=SURFACE_ALT,
+        bg=parent_bg,
         height=76,
         cursor="hand2",
-        highlightbackground=DIVIDER,
-        highlightthickness=1,
+        borderwidth=0,
+        highlightthickness=0,
     )
     frame.pack_propagate(False)
 
-    cover_frame = Frame(frame, width=58, height=58, bg=SURFACE)
-    cover_frame.pack(side=LEFT, padx=8, pady=8)
+    shell = Canvas(
+        frame,
+        bg=parent_bg,
+        borderwidth=0,
+        highlightthickness=0,
+        cursor="hand2",
+    )
+    shell.pack(fill=BOTH, expand=True)
+
+    rounded_background = shell.create_polygon(
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        fill=mini_bg,
+        outline=ACCENT,
+        width=1,
+        smooth=True,
+    )
+    body = Frame(shell, bg=mini_bg, borderwidth=0)
+    body_window = shell.create_window(3, 3, window=body, anchor="nw")
+
+    def resize_shell(event):
+        radius = 11
+        left = 1
+        top = 1
+        right = max(left, event.width - 1)
+        bottom = max(top, event.height - 1)
+        points = (
+            left + radius, top,
+            right - radius, top,
+            right, top,
+            right, top + radius,
+            right, bottom - radius,
+            right, bottom,
+            right - radius, bottom,
+            left + radius, bottom,
+            left, bottom,
+            left, bottom - radius,
+            left, top + radius,
+            left, top,
+        )
+        shell.coords(rounded_background, *points)
+        shell.itemconfigure(
+            body_window,
+            width=max(1, event.width - 6),
+            height=max(1, event.height - 6),
+        )
+
+    shell.bind("<Configure>", resize_shell)
+
+    accent_bar = Frame(body, width=1, bg=ACCENT, cursor="hand2")
+    accent_bar.pack(side=LEFT, fill=BOTH)
+    accent_bar.pack_propagate(False)
+
+    cover_frame = Frame(body, width=58, height=58, bg=SURFACE)
+    cover_frame.pack(side=LEFT, padx=(8, 10), pady=6)
     cover_frame.pack_propagate(False)
     cover = Label(cover_frame, bg=SURFACE, borderwidth=0)
     cover.pack(fill=BOTH, expand=True)
 
-    text = Frame(frame, bg=SURFACE_ALT)
+    text = Frame(body, bg=mini_bg)
     track = Label(
         text,
         fg=TEXT,
-        bg=SURFACE_ALT,
+        bg=mini_bg,
         anchor="w",
         font=(FONT, 12, "bold"),
     )
     artist = Label(
         text,
         fg=TEXT_MUTED,
-        bg=SURFACE_ALT,
+        bg=mini_bg,
         anchor="w",
         font=(FONT, 10),
     )
@@ -90,7 +150,7 @@ def create_mini_player(root, parent, button_style, before=None):
         return value[:low] + ellipsis
 
     play = Button(
-        frame,
+        body,
         text="Ⅱ",
         command=on_toggle_play,
         width=3,
@@ -105,7 +165,17 @@ def create_mini_player(root, parent, button_style, before=None):
     play.pack(side=RIGHT, padx=8, pady=10)
     text.pack(side=LEFT, fill=BOTH, expand=True, pady=10)
 
-    for widget in (frame, cover_frame, cover, text, track, artist):
+    for widget in (
+        frame,
+        shell,
+        body,
+        accent_bar,
+        cover_frame,
+        cover,
+        text,
+        track,
+        artist,
+    ):
         widget.bind("<Button-1>", lambda _event: go_player())
 
     cover_key = None
