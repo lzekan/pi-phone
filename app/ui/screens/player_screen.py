@@ -4,6 +4,7 @@ from queue import Empty, Queue
 from threading import Thread
 from tkinter import BOTH, LEFT, NORMAL, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
+from tkinter import font as tkfont
 from tkinter import ttk
 
 from app.controller.controller_player import (
@@ -90,6 +91,28 @@ def _get_progress_ms(song, now):
 def _format_time(milliseconds):
     milliseconds = max(0, int(milliseconds or 0))
     return f"{milliseconds // 60000}:{(milliseconds % 60000) // 1000:02d}"
+
+
+def _ellipsize(text, text_font, max_width):
+    text = str(text or "")
+    if not text or text_font.measure(text) <= max_width:
+        return text
+
+    ellipsis = "..."
+    available_width = max_width - text_font.measure(ellipsis)
+    if available_width <= 0:
+        return ellipsis
+
+    low = 0
+    high = len(text)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if text_font.measure(text[:middle]) <= available_width:
+            low = middle
+        else:
+            high = middle - 1
+
+    return f"{text[:low].rstrip()}{ellipsis}"
 
 
 def _seek_position_ms(x, width, duration_ms):
@@ -224,6 +247,9 @@ def render_player(root, state, button_style):
 
     metadata = Frame(now_playing, bg=SURFACE)
     metadata.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10), pady=17)
+    track_text_font = tkfont.Font(family=FONT, size=18, weight="bold")
+    artist_text_font = tkfont.Font(family=FONT, size=12)
+    album_text_font = tkfont.Font(family=FONT, size=9)
     source_label = Label(
         metadata,
         text="NOW PLAYING",
@@ -239,8 +265,8 @@ def render_player(root, state, button_style):
         bg=SURFACE,
         anchor="w",
         justify=LEFT,
-        wraplength=235,
-        font=(FONT, 18, "bold"),
+        height=1,
+        font=track_text_font,
     )
     track_label.pack(fill=X)
     artist_label = Label(
@@ -249,8 +275,8 @@ def render_player(root, state, button_style):
         bg=SURFACE,
         anchor="w",
         justify=LEFT,
-        wraplength=235,
-        font=(FONT, 12),
+        height=1,
+        font=artist_text_font,
     )
     artist_label.pack(fill=X, pady=(8, 0))
     album_label = Label(
@@ -259,10 +285,45 @@ def render_player(root, state, button_style):
         bg=SURFACE,
         anchor="w",
         justify=LEFT,
-        wraplength=235,
-        font=(FONT, 9),
+        height=1,
+        font=album_text_font,
     )
     album_label.pack(fill=X, pady=(5, 0))
+
+    metadata_text = {
+        "track": "",
+        "artist": "",
+        "album": "",
+    }
+
+    def refresh_metadata_labels(_event=None):
+        available_width = metadata.winfo_width()
+        if available_width <= 20:
+            available_width = 235
+
+        track_label.config(
+            text=_ellipsize(
+                metadata_text["track"],
+                track_text_font,
+                available_width,
+            )
+        )
+        artist_label.config(
+            text=_ellipsize(
+                metadata_text["artist"],
+                artist_text_font,
+                available_width,
+            )
+        )
+        album_label.config(
+            text=_ellipsize(
+                metadata_text["album"],
+                album_text_font,
+                available_width,
+            )
+        )
+
+    metadata.bind("<Configure>", refresh_metadata_labels)
 
     progress_area = Frame(frame, bg=BG)
     progress_area.pack(fill=X, padx=22, pady=(0, 4))
@@ -948,9 +1009,10 @@ def render_player(root, state, button_style):
         cover_cursor = "" if source == "local" else "hand2"
         cover_frame.config(cursor=cover_cursor)
         cover_label.config(cursor=cover_cursor)
-        track_label.config(text=song.get("track", ""))
-        artist_label.config(text=song.get("artist", ""))
-        album_label.config(text=song.get("album_name", ""))
+        metadata_text["track"] = song.get("track", "")
+        metadata_text["artist"] = song.get("artist", "")
+        metadata_text["album"] = song.get("album_name", "")
+        refresh_metadata_labels()
         wheel.itemconfig(
             play_text,
             text="Ⅱ" if song.get("is_playing", False) else "▶",
