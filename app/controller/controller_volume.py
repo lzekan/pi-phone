@@ -11,9 +11,11 @@ _volume_queue = Queue()
 
 def _volume_worker():
     while True:
-        step_percent = _volume_queue.get()
+        step_percent, on_changed = _volume_queue.get()
         try:
-            audio_output_service.change_volume(step_percent)
+            volume_percent = audio_output_service.change_volume(step_percent)
+            if on_changed:
+                on_changed(volume_percent)
         except Exception as error:
             print(f"[VOLUME ERROR] {error}")
         finally:
@@ -23,9 +25,19 @@ def _volume_worker():
 Thread(target=_volume_worker, daemon=True).start()
 
 
-def on_volume_up():
-    _volume_queue.put(VOLUME_STEP_PERCENT)
+def _apply_saved_volume_limit():
+    try:
+        audio_output_service.enforce_maximum_volume()
+    except Exception as error:
+        print(f"[VOLUME LIMIT ERROR] {error}")
 
 
-def on_volume_down():
-    _volume_queue.put(-VOLUME_STEP_PERCENT)
+Thread(target=_apply_saved_volume_limit, daemon=True).start()
+
+
+def on_volume_up(on_changed=None):
+    _volume_queue.put((VOLUME_STEP_PERCENT, on_changed))
+
+
+def on_volume_down(on_changed=None):
+    _volume_queue.put((-VOLUME_STEP_PERCENT, on_changed))

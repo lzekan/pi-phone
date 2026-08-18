@@ -1,5 +1,6 @@
 import math
 import time
+from queue import Empty, Queue
 from threading import Thread
 from tkinter import BOTH, LEFT, NORMAL, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
@@ -99,6 +100,61 @@ def _seek_position_ms(x, width, duration_ms):
 
 def render_player(root, state, button_style):
     frame = Frame(root, bg=BG)
+
+    volume_popup = Frame(
+        frame,
+        bg=CARD,
+        width=142,
+        height=42,
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
+    )
+    volume_popup.pack_propagate(False)
+    volume_value = Label(
+        volume_popup,
+        text="VOLUME  0",
+        fg=TEXT,
+        bg=CARD,
+        font=(FONT, 11, "bold"),
+        anchor="center",
+    )
+    volume_value.pack(fill=BOTH, expand=True)
+    volume_popup_hide_job = None
+    volume_updates = Queue()
+
+    def hide_volume_popup():
+        nonlocal volume_popup_hide_job
+        volume_popup.place_forget()
+        volume_popup_hide_job = None
+
+    def show_volume_popup(volume_percent):
+        nonlocal volume_popup_hide_job
+
+        if volume_popup_hide_job is not None:
+            root.after_cancel(volume_popup_hide_job)
+
+        volume_value.config(text=f"VOLUME  {volume_percent}")
+        volume_popup.place(relx=0.5, rely=1, y=-12, anchor="s")
+        volume_popup.lift()
+        volume_popup_hide_job = root.after(1400, hide_volume_popup)
+
+    def report_volume(volume_percent):
+        volume_updates.put(volume_percent)
+
+    def process_volume_updates():
+        latest_volume = None
+        try:
+            while True:
+                latest_volume = volume_updates.get_nowait()
+        except Empty:
+            pass
+
+        if latest_volume is not None:
+            show_volume_popup(latest_volume)
+
+        root.after(50, process_volume_updates)
+
+    root.after(50, process_volume_updates)
 
     header = Frame(frame, bg=BG, height=52)
     header.pack(fill=X, padx=PAGE_PAD, pady=(10, 0))
@@ -402,7 +458,10 @@ def render_player(root, state, button_style):
             action = on_volume_down if dy > 0 else on_volume_up
 
         flash_wheel_control(control)
-        action()
+        if control in ("up", "down"):
+            action(report_volume)
+        else:
+            action()
         frame.focus_set()
 
     wheel.bind("<Button-1>", handle_wheel_press)

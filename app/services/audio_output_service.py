@@ -1,6 +1,8 @@
 import re
 import subprocess
 
+from app.services.settings_service import get_maximum_volume
+
 
 WIRED_NODE_PREFIX = "alsa_output.platform-fe00b840.mailbox"
 BLUETOOTH_NODE_PREFIX = "bluez_output."
@@ -90,16 +92,54 @@ def get_output_devices():
 
 def set_output_device(device_id):
     _run(["wpctl", "set-default", str(int(device_id))])
+    enforce_maximum_volume()
+
+
+def get_volume_percent():
+    output = _run([
+        "wpctl",
+        "get-volume",
+        "@DEFAULT_AUDIO_SINK@",
+    ])
+    match = re.search(r"Volume:\s+([0-9]+(?:\.[0-9]+)?)", output)
+    if not match:
+        raise RuntimeError("Unable to read PipeWire volume")
+    return round(float(match.group(1)) * 100)
+
+
+def set_volume_percent(volume_percent):
+    maximum_volume = get_maximum_volume()
+    volume_percent = max(0, min(maximum_volume, int(volume_percent)))
+    _run([
+        "wpctl",
+        "set-volume",
+        "-l",
+        f"{maximum_volume / 100:.2f}",
+        "@DEFAULT_AUDIO_SINK@",
+        f"{volume_percent / 100:.2f}",
+    ])
+    return volume_percent
+
+
+def enforce_maximum_volume():
+    maximum_volume = get_maximum_volume()
+    current_volume = get_volume_percent()
+    if current_volume > maximum_volume:
+        set_volume_percent(maximum_volume)
+        return maximum_volume
+    return current_volume
 
 
 def change_volume(step_percent):
     step = abs(int(step_percent))
     direction = "+" if step_percent > 0 else "-"
+    maximum_volume = get_maximum_volume()
     _run([
         "wpctl",
         "set-volume",
         "-l",
-        "1.0",
+        f"{maximum_volume / 100:.2f}",
         "@DEFAULT_AUDIO_SINK@",
         f"{step}%{direction}",
     ])
+    return get_volume_percent()

@@ -2,6 +2,7 @@ from app.controller.controller_navigation import go_launcher
 from app.core.state import get_state
 from app.ui.screens.launcher_screen import render_launcher
 from app.ui.screens.player_screen import render_player
+from app.ui.screens.settings_screen import render_settings
 from app.features.spotify.screens.home_screen import render_home
 from app.features.spotify.screens.collection_screen import render_playlist
 from app.features.local_audio.screens.library_screen import render_local_library
@@ -36,6 +37,7 @@ def start_ui(root):
         "player": render_player(root, get_state(), BUTTON_STYLE),
         "playlist": render_playlist(root, get_state(), BUTTON_STYLE),
         "local_library": render_local_library(root, get_state(), BUTTON_STYLE),
+        "settings": render_settings(root, get_state()),
     }
 
     for screen in screens.values():

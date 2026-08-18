@@ -27,3 +27,6 @@ def go_launcher():
 
 def go_local_library():
     get_state()["screen"] = "local_library"
+
+def go_settings():
+    get_state()["screen"] = "settings"

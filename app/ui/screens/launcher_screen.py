@@ -4,7 +4,7 @@ from threading import Thread
 from tkinter import BOTH, LEFT, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 
-from app.controller.controller_navigation import go_home
+from app.controller.controller_navigation import go_home, go_settings
 from app.features.local_audio.controller import open_library
 from app.services.battery_service import get_battery_status
 from app.ui.theme import (
@@ -235,7 +235,13 @@ def render_launcher(root, _state):
     )
     spacer = Frame(secondary, bg=BG, width=10)
     spacer.pack(side=LEFT)
-    create_placeholder_tile(secondary, "Settings", "⚙")
+    create_placeholder_tile(
+        secondary,
+        "Settings",
+        "⚙",
+        subtitle="DEVICE CONTROLS",
+        command=go_settings,
+    )
 
     Label(
         frame,
