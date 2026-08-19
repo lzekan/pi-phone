@@ -3,7 +3,12 @@ from tkinter import BOTH, LEFT, NORMAL, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_launcher
-from app.services import audio_output_service, device_info_service, settings_service
+from app.services import (
+    audio_output_service,
+    battery_service,
+    device_info_service,
+    settings_service,
+)
 from app.controller.controller_brightness import (
     preview_brightness,
     save_brightness,
@@ -51,7 +56,7 @@ SETTINGS_SECTIONS = (
     (
         "Power",
         (
-            ("BA", "Battery", "Status and health"),
+            ("BA", "Battery", "Battery status"),
             ("LB", "Low battery shutdown", "10%"),
         ),
     ),
@@ -88,6 +93,8 @@ def render_settings(root, _state):
     timeout_row_widgets = ()
     timeout_pending = settings_service.get_screen_timeout()
     information_row_widgets = ()
+    battery_value_label = None
+    battery_row_widgets = ()
 
     header = Frame(frame, bg=BG)
     header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
@@ -293,6 +300,9 @@ def render_settings(root, _state):
                 )
             elif title == "Device information":
                 information_row_widgets = row_widgets
+            elif title == "Battery":
+                battery_row_widgets = row_widgets
+                battery_value_label = value_label
 
     Label(
         content,
@@ -1211,6 +1221,239 @@ def render_settings(root, _state):
 
         Thread(target=worker, daemon=True).start()
 
+    battery_panel = Frame(frame, bg=BG)
+    battery_refresh_job = None
+    battery_generation = 0
+
+    battery_header = Frame(battery_panel, bg=BG)
+    battery_header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
+
+    battery_heading = Frame(battery_header, bg=BG)
+    battery_heading.pack(side=LEFT, padx=(12, 0))
+    Label(
+        battery_heading,
+        text="POWER",
+        fg=ACCENT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 9, "bold"),
+    ).pack(fill=X)
+    Label(
+        battery_heading,
+        text="Battery",
+        fg=TEXT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 22, "bold"),
+    ).pack(fill=X)
+
+    battery_body = Frame(battery_panel, bg=BG)
+    battery_body.pack(fill=BOTH, expand=True, padx=PAGE_PAD, pady=(4, 18))
+
+    battery_summary = Frame(
+        battery_body,
+        bg=CARD,
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
+    )
+    battery_summary.pack(fill=X, pady=(0, 12))
+
+    battery_percentage = Label(
+        battery_summary,
+        text="--%",
+        fg=TEXT,
+        bg=CARD,
+        font=(FONT, 42, "bold"),
+    )
+    battery_percentage.pack(pady=(18, 0))
+    battery_status_label = Label(
+        battery_summary,
+        text="Loading...",
+        fg=TEXT_MUTED,
+        bg=CARD,
+        font=(FONT, 11, "bold"),
+    )
+    battery_status_label.pack(pady=(0, 10))
+
+    battery_bar = Canvas(
+        battery_summary,
+        height=34,
+        bg=CARD,
+        highlightthickness=0,
+        borderwidth=0,
+    )
+    battery_bar.pack(fill=X, padx=28, pady=(0, 18))
+
+    battery_details = Frame(
+        battery_body,
+        bg=CARD,
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
+    )
+    battery_details.pack(fill=X)
+    battery_detail_values = {}
+
+    for index, detail_name in enumerate(("Status", "Charger", "Estimated time")):
+        detail_row = Frame(battery_details, bg=CARD)
+        detail_row.pack(fill=X, padx=14, pady=11)
+        Label(
+            detail_row,
+            text=detail_name,
+            fg=TEXT_MUTED,
+            bg=CARD,
+            anchor="w",
+            font=(FONT, 9),
+        ).pack(fill=X)
+        detail_value = Label(
+            detail_row,
+            text="--",
+            fg=TEXT,
+            bg=CARD,
+            anchor="w",
+            justify="left",
+            wraplength=405,
+            font=(FONT, 11, "bold"),
+        )
+        detail_value.pack(fill=X, pady=(2, 0))
+        battery_detail_values[detail_name] = detail_value
+
+        if index != 2:
+            Frame(battery_details, bg=DIVIDER, height=1).pack(fill=X, padx=14)
+
+    def draw_battery_bar(percentage):
+        width = max(40, battery_bar.winfo_width())
+        right = width - 10
+        battery_bar.delete("all")
+        battery_bar.create_rectangle(
+            2,
+            4,
+            right,
+            30,
+            outline=TEXT_MUTED,
+            width=2,
+        )
+        battery_bar.create_rectangle(
+            right,
+            11,
+            width - 2,
+            23,
+            fill=TEXT_MUTED,
+            outline="",
+        )
+        fill_width = 5 + max(0, right - 9) * percentage / 100
+        battery_bar.create_rectangle(
+            6,
+            8,
+            fill_width,
+            26,
+            fill=ACCENT if percentage > 20 else DANGER,
+            outline="",
+        )
+
+    def render_battery_status(status, generation):
+        nonlocal battery_refresh_job
+
+        if generation != battery_generation or not battery_panel.winfo_manager():
+            return
+
+        if status is None:
+            battery_percentage.config(text="--%")
+            battery_status_label.config(text="Unavailable", fg=DANGER)
+            for value_label in battery_detail_values.values():
+                value_label.config(text="--")
+        else:
+            percentage = status["percentage"]
+            status_text = status["status"]
+            battery_percentage.config(text=f"{percentage}%")
+            battery_status_label.config(
+                text=status_text,
+                fg=ACCENT if status["power_plugged"] else TEXT_MUTED,
+            )
+            battery_detail_values["Status"].config(text=status_text)
+            battery_detail_values["Charger"].config(
+                text="Connected" if status["power_plugged"] else "Not connected"
+            )
+            battery_detail_values["Estimated time"].config(
+                text=status["estimated_time"]
+            )
+            draw_battery_bar(percentage)
+            if battery_value_label is not None and battery_value_label.winfo_exists():
+                battery_value_label.config(text=f"{percentage}%")
+
+        battery_refresh_job = root.after(
+            5000,
+            lambda: refresh_battery_panel(generation),
+        )
+
+    def refresh_battery_panel(generation):
+        if generation != battery_generation or not battery_panel.winfo_manager():
+            return
+
+        def worker():
+            try:
+                status = battery_service.get_battery_status()
+            except (KeyError, OSError, ValueError):
+                status = None
+            root.after(0, lambda: render_battery_status(status, generation))
+
+        Thread(target=worker, daemon=True).start()
+
+    def close_battery_panel():
+        nonlocal battery_refresh_job, battery_generation
+        battery_generation += 1
+        if battery_refresh_job is not None:
+            root.after_cancel(battery_refresh_job)
+            battery_refresh_job = None
+        battery_panel.place_forget()
+
+    Button(
+        battery_header,
+        text="‹",
+        command=close_battery_panel,
+        fg=TEXT,
+        bg=SURFACE_ALT,
+        activeforeground=TEXT,
+        activebackground=CARD,
+        font=(FONT, 22, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        width=3,
+        pady=0,
+    ).pack(side=LEFT, before=battery_heading)
+
+    battery_bar.bind(
+        "<Configure>",
+        lambda _event: draw_battery_bar(
+            int(battery_percentage.cget("text").rstrip("%"))
+            if battery_percentage.cget("text") != "--%"
+            else 0
+        ),
+    )
+
+    def open_battery_panel():
+        nonlocal battery_generation
+
+        close_output_panel()
+        maximum_panel.place_forget()
+        brightness_panel.place_forget()
+        timeout_panel.place_forget()
+        information_panel.place_forget()
+        close_battery_panel()
+
+        battery_generation += 1
+        generation = battery_generation
+        battery_percentage.config(text="--%")
+        battery_status_label.config(text="Loading...", fg=TEXT_MUTED)
+        for value_label in battery_detail_values.values():
+            value_label.config(text="--")
+        draw_battery_bar(0)
+
+        battery_panel.place(x=0, y=0, relwidth=1, relheight=1)
+        battery_panel.lift()
+        refresh_battery_panel(generation)
+
     drag_start_y = 0
 
     def start_drag(event):
@@ -1248,6 +1491,10 @@ def render_settings(root, _state):
     def finish_information_press(event):
         if abs(event.y_root - drag_start_y) <= 4:
             open_information_panel()
+
+    def finish_battery_press(event):
+        if abs(event.y_root - drag_start_y) <= 4:
+            open_battery_panel()
 
     def bind_scroll(widget):
         widget.bind("<ButtonPress-1>", start_drag)
@@ -1290,12 +1537,20 @@ def render_settings(root, _state):
             finish_information_press,
         )
 
+    for widget in battery_row_widgets:
+        widget.config(cursor="hand2")
+        widget.bind(
+            "<ButtonRelease-1>",
+            finish_battery_press,
+        )
+
     def on_show():
         close_output_panel()
         maximum_panel.place_forget()
         brightness_panel.place_forget()
         timeout_panel.place_forget()
         information_panel.place_forget()
+        close_battery_panel()
         canvas.yview_moveto(0)
         if maximum_value_label is not None and maximum_value_label.winfo_exists():
             maximum_value_label.config(
