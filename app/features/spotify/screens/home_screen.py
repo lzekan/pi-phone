@@ -542,6 +542,69 @@ def render_home(root, state, button_style):
     recent_frame = Frame(content, bg=BG)
     recent_frame.pack(fill=X)
 
+    liked_songs_card = Frame(
+        content,
+        bg=CARD,
+        height=76,
+        cursor="hand2",
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
+    )
+    liked_songs_card.pack(fill=X, pady=(18, 0))
+    liked_songs_card.pack_propagate(False)
+
+    liked_songs_icon = Label(
+        liked_songs_card,
+        text="♥",
+        fg=TEXT,
+        bg=ACCENT,
+        width=4,
+        font=(FONT, 22, "bold"),
+        cursor="hand2",
+    )
+    liked_songs_icon.pack(side=LEFT, fill="y")
+
+    liked_songs_text = Frame(liked_songs_card, bg=CARD, cursor="hand2")
+    liked_songs_text.pack(side=LEFT, fill=BOTH, expand=True, padx=14, pady=12)
+    liked_songs_title = Label(
+        liked_songs_text,
+        text="Liked Songs",
+        fg=TEXT,
+        bg=CARD,
+        anchor="w",
+        font=(FONT, 13, "bold"),
+        cursor="hand2",
+    )
+    liked_songs_title.pack(fill=X)
+    liked_songs_subtitle = Label(
+        liked_songs_text,
+        text="Your saved tracks",
+        fg=TEXT_MUTED,
+        bg=CARD,
+        anchor="w",
+        font=(FONT, 9),
+        cursor="hand2",
+    )
+    liked_songs_subtitle.pack(fill=X)
+
+    def open_liked_songs(_event=None):
+        if home_drag_mode is not None:
+            return
+        state["current_collection_name"] = "Liked Songs"
+        state["current_collection_uri"] = "spotify:collection:tracks"
+        state["current_collection_type"] = "liked"
+        state["current_collection_image_url"] = None
+        go_playlist()
+
+    for widget in (
+        liked_songs_card,
+        liked_songs_icon,
+        liked_songs_text,
+        liked_songs_title,
+        liked_songs_subtitle,
+    ):
+        widget.bind("<ButtonRelease-1>", open_liked_songs)
+
     Label(
         content,
         text="Your playlists",

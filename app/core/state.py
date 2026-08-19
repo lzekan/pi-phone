@@ -20,6 +20,10 @@ _state = {
     "device_recent_tracks": [],
     "playlists": [],
     "albums": [],
+    "current_track_saved": None,
+    "track_library_loading": False,
+    "track_library_error": None,
+    "liked_tracks_dirty": False,
     "user": {},
     "home_loading": False,
     "home_error": None,
@@ -42,7 +46,9 @@ _state = {
     "search_error": None,
     "local": {
         "tracks": [],
+        "queue": [],
         "current_index": None,
+        "sequence_index": None,
         "loading": False,
         "loaded": False,
         "error": None

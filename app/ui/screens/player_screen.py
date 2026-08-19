@@ -18,6 +18,10 @@ from app.controller.controller_queue import remove_queue_item
 from app.controller.controller_navigation import go_back, go_playlist
 from app.controller.controller_volume import on_volume_down, on_volume_up
 from app.core.state import get_state
+from app.features.spotify.controllers.player import (
+    load_current_track_library_status,
+    toggle_current_track_saved,
+)
 from app.services import audio_output_service
 from app.services.image_cache import get_photo_async
 from app.ui.theme import (
@@ -145,6 +149,42 @@ def render_player(root, state, button_style):
     volume_popup_hide_job = None
     volume_updates = Queue()
 
+    library_popup = Label(
+        frame,
+        text="",
+        fg=TEXT,
+        bg=CARD,
+        font=(FONT, 10, "bold"),
+        padx=14,
+        pady=9,
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
+    )
+    library_popup_hide_job = None
+
+    def show_library_popup(saved):
+        nonlocal library_popup_hide_job
+
+        if library_popup_hide_job is not None:
+            root.after_cancel(library_popup_hide_job)
+
+        library_popup.config(
+            text=(
+                "Added to Liked Songs"
+                if saved
+                else "Removed from Liked Songs"
+            )
+        )
+        library_popup.place(relx=0.5, rely=1, y=-12, anchor="s")
+        library_popup.lift()
+
+        def hide_library_popup():
+            nonlocal library_popup_hide_job
+            library_popup.place_forget()
+            library_popup_hide_job = None
+
+        library_popup_hide_job = root.after(2000, hide_library_popup)
+
     def hide_volume_popup():
         nonlocal volume_popup_hide_job
         volume_popup.place_forget()
@@ -224,6 +264,19 @@ def render_player(root, state, button_style):
     )
     queue_results = Frame(frame, bg=SURFACE)
 
+    def toggle_track_saved():
+        current_state = get_state()
+        if current_state.get("track_library_loading"):
+            return
+        current_state["track_library_loading"] = True
+
+        def worker():
+            saved = toggle_current_track_saved()
+            if saved is not None:
+                root.after(0, lambda: show_library_popup(saved))
+
+        Thread(target=worker, daemon=True).start()
+
     now_playing = Frame(
         frame,
         bg=SURFACE,
@@ -233,6 +286,24 @@ def render_player(root, state, button_style):
     )
     now_playing.pack(fill=X, padx=PAGE_PAD, pady=(10, 10))
     now_playing.pack_propagate(False)
+
+    like_button = Button(
+        now_playing,
+        text="＋",
+        command=toggle_track_saved,
+        fg=TEXT,
+        bg=SURFACE,
+        activeforeground=ACCENT,
+        activebackground=SURFACE_ACTIVE,
+        disabledforeground=TEXT_MUTED,
+        font=(FONT, 18, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        width=3,
+        pady=2,
+    )
 
     cover_frame = Frame(now_playing, width=174, height=174, bg=SURFACE_ALT)
     cover_frame.pack(side=LEFT, padx=(12, 14), pady=19)
@@ -668,7 +739,13 @@ def render_player(root, state, button_style):
             anchor="se",
         )
 
-        queue = get_state().get("spotify_manual_queue", [])
+        current_state = get_state()
+        is_local_queue = current_state["song"].get("source") == "local"
+        queue = (
+            current_state["local"].get("queue", [])
+            if is_local_queue
+            else current_state.get("spotify_manual_queue", [])
+        )
         Label(
             queue_results,
             text="UP NEXT",
@@ -776,7 +853,18 @@ def render_player(root, state, button_style):
                 cover = Label(cover_frame, bg=SURFACE, borderwidth=0)
                 cover.pack(fill=BOTH, expand=True)
 
-                is_committed = queued_track.get("committed", False)
+                if is_local_queue:
+                    cover.config(
+                        text="♫",
+                        fg=TEXT_DIM,
+                        font=(FONT, 21, "bold"),
+                    )
+
+                is_committed = (
+                    queued_track.get("committed", False)
+                    if not is_local_queue
+                    else False
+                )
 
                 remove_button = Button(
                     row,
@@ -842,7 +930,11 @@ def render_player(root, state, button_style):
 
                     current_queue_ids = {
                         item.get("queue_id")
-                        for item in get_state().get("spotify_manual_queue", [])
+                        for item in (
+                            get_state()["local"].get("queue", [])
+                            if is_local_queue
+                            else get_state().get("spotify_manual_queue", [])
+                        )
                     }
 
                     if expected_queue_id not in current_queue_ids:
@@ -851,12 +943,13 @@ def render_player(root, state, button_style):
                     label.config(image=photo if photo is not None else "")
                     label.image = photo
 
-                get_photo_async(
-                    root,
-                    queued_track.get("image_url"),
-                    (50, 50),
-                    show_queue_cover,
-                )
+                if not is_local_queue:
+                    get_photo_async(
+                        root,
+                        queued_track.get("image_url"),
+                        (50, 50),
+                        show_queue_cover,
+                    )
 
         queue_results.lift()
 
@@ -905,6 +998,7 @@ def render_player(root, state, button_style):
 
     player_cover_key = None
     preloaded_next_track_id = None
+    library_track_id = None
     seeking = False
     seek_preview_ms = 0
 
@@ -976,10 +1070,41 @@ def render_player(root, state, button_style):
     root.bind("<Configure>", restore_cover, add="+")
 
     def update(current_state):
-        nonlocal player_cover_key, preloaded_next_track_id
+        nonlocal player_cover_key, preloaded_next_track_id, library_track_id
 
         song = current_state["song"]
         source = song.get("source", "spotify")
+        track_id = song.get("track_id")
+
+        if source == "spotify" and track_id:
+            if track_id != library_track_id:
+                library_track_id = track_id
+                current_state["current_track_saved"] = None
+                current_state["track_library_loading"] = True
+                current_state["track_library_error"] = None
+                Thread(
+                    target=load_current_track_library_status,
+                    args=(track_id,),
+                    daemon=True,
+                ).start()
+
+            is_saved = bool(current_state.get("current_track_saved"))
+            like_button.config(
+                text="＋",
+                fg=ACCENT if is_saved else TEXT,
+                state=(
+                    "disabled"
+                    if current_state.get("track_library_loading")
+                    else "normal"
+                ),
+            )
+            if not like_button.winfo_manager():
+                like_button.place(relx=1, rely=1, x=-2, y=-10, anchor="se")
+                like_button.lift()
+        else:
+            library_track_id = None
+            like_button.place_forget()
+
         next_song = current_state.get("next_song")
         next_track_id = _get_track_id(next_song) if next_song else None
         if source == "spotify" and next_track_id != preloaded_next_track_id:

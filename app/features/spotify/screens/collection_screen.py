@@ -7,6 +7,7 @@ from app.features.spotify.controllers.player import play_selected_track
 from app.features.spotify.controllers.collection import (
     load_album,
     load_album_library_status,
+    load_liked_tracks,
     load_more_collection,
     load_playlist,
     toggle_current_album_saved,
@@ -106,7 +107,7 @@ def render_playlist(root, state, button_style):
 
     album_save_button = Button(
         collection_hero,
-        text="♡",
+        text="＋",
         command=toggle_album_saved,
         fg=TEXT,
         bg=SURFACE,
@@ -130,10 +131,20 @@ def render_playlist(root, state, button_style):
     tracks_window = tracks_canvas.create_window((0, 0), window=tracks_list, anchor="nw")
     tracks_canvas.pack(side=LEFT, fill=BOTH, expand=True)
 
-    tracks_list.bind(
-        "<Configure>",
-        lambda _event: tracks_canvas.configure(scrollregion=tracks_canvas.bbox("all")),
-    )
+    def update_tracks_scrollregion(_event=None):
+        bounds = tracks_canvas.bbox("all")
+        if bounds is None:
+            return
+        tracks_canvas.configure(
+            scrollregion=(
+                0,
+                0,
+                bounds[2],
+                max(bounds[3], tracks_canvas.winfo_height()),
+            )
+        )
+
+    tracks_list.bind("<Configure>", update_tracks_scrollregion)
     tracks_canvas.bind(
         "<Configure>",
         lambda event: tracks_canvas.itemconfigure(tracks_window, width=event.width),
@@ -151,6 +162,8 @@ def render_playlist(root, state, button_style):
     drag_start_y = 0
     tracks_dragged = False
     drag_axis = None
+    drag_started_at_top = False
+    pull_offset = 0
     dragged_info_frame = None
     queue_toast_after_id = None
     collection_cover_key = None
@@ -254,16 +267,19 @@ def render_playlist(root, state, button_style):
 
     def start_tracks_drag(event, info_frame=None):
         nonlocal drag_start_x, drag_start_y, tracks_dragged
-        nonlocal drag_axis, dragged_info_frame
+        nonlocal drag_axis, drag_started_at_top, pull_offset, dragged_info_frame
         drag_start_x = event.x_root
         drag_start_y = event.y_root
         tracks_dragged = False
         drag_axis = None
+        drag_started_at_top = tracks_canvas.yview()[0] <= 0.001
+        pull_offset = 0
+        tracks_canvas.coords(tracks_window, 0, 0)
         dragged_info_frame = info_frame
         tracks_canvas.scan_mark(0, tracks_canvas_y(event))
 
     def drag_tracks(event):
-        nonlocal tracks_dragged, drag_axis
+        nonlocal tracks_dragged, drag_axis, pull_offset
         delta_x = event.x_root - drag_start_x
         delta_y = event.y_root - drag_start_y
 
@@ -277,30 +293,78 @@ def render_playlist(root, state, button_style):
             return
 
         if drag_axis == "vertical":
+            current_state = get_state()
+            if (
+                drag_started_at_top
+                and delta_y > 0
+                and current_state.get("current_collection_type") == "liked"
+            ):
+                pull_offset = min(int(delta_y * 0.45), 58)
+                tracks_canvas.coords(tracks_window, 0, pull_offset)
+                return
+
             tracks_canvas.scan_dragto(0, tracks_canvas_y(event), gain=1)
             schedule_visible_covers()
+
+    def reset_pull_offset():
+        nonlocal pull_offset
+
+        if pull_offset <= 0:
+            pull_offset = 0
+            tracks_canvas.coords(tracks_window, 0, 0)
+            return
+
+        pull_offset = max(0, pull_offset - 8)
+        tracks_canvas.coords(tracks_window, 0, pull_offset)
+        if pull_offset:
+            root.after(16, reset_pull_offset)
 
     def finish_track_press(event, track_uri, collection_uri, track_data):
         nonlocal dragged_info_frame
         delta_x = event.x_root - drag_start_x
+        delta_y = event.y_root - drag_start_y
 
         if dragged_info_frame is not None and dragged_info_frame.winfo_exists():
             dragged_info_frame.pack_configure(padx=0)
         dragged_info_frame = None
+        reset_pull_offset()
+
+        current_state = get_state()
+        should_refresh_liked = (
+            drag_axis == "vertical"
+            and drag_started_at_top
+            and delta_y >= 90
+            and current_state.get("current_collection_type") == "liked"
+            and not current_state.get("collection_loading")
+        )
+        if should_refresh_liked:
+            current_state["collection_error"] = None
+            current_state["liked_tracks_dirty"] = False
+            Thread(target=load_liked_tracks, daemon=True).start()
+            return
 
         if drag_axis == "horizontal" and delta_x >= 60 and track_uri:
             add_to_manual_queue(track_data)
             show_queue_toast()
         elif not tracks_dragged and track_uri:
+            playback_context = (
+                None
+                if get_state().get("current_collection_type") == "liked"
+                else collection_uri
+            )
             play_selected_track(
                 track_uri,
-                collection_uri,
+                playback_context,
                 track_data=track_data,
             )
 
     for widget in (tracks_canvas, tracks_list):
         widget.bind("<ButtonPress-1>", start_tracks_drag)
         widget.bind("<B1-Motion>", drag_tracks)
+        widget.bind(
+            "<ButtonRelease-1>",
+            lambda event: finish_track_press(event, None, None, None),
+        )
 
     def rebuild_tracks(current_state):
         nonlocal tracks_signature, cover_rows
@@ -470,7 +534,11 @@ def render_playlist(root, state, button_style):
         schedule_visible_covers()
 
     def set_collection_cover(cover_key, url):
-        collection_cover.config(image="")
+        collection_cover.config(
+            image="",
+            text="",
+            bg=SURFACE_ALT,
+        )
         collection_cover.image = None
 
         def show_cover(photo):
@@ -518,7 +586,18 @@ def render_playlist(root, state, button_style):
             current_state.get("current_collection_uri"),
             current_state.get("current_collection_image_url"),
         )
-        if new_collection_cover_key != collection_cover_key:
+        if collection_type == "liked":
+            if new_collection_cover_key != collection_cover_key:
+                collection_cover_key = new_collection_cover_key
+                collection_cover.config(
+                    image="",
+                    text="♥",
+                    fg=TEXT,
+                    bg=ACCENT,
+                    font=(FONT, 40, "bold"),
+                )
+                collection_cover.image = None
+        elif new_collection_cover_key != collection_cover_key:
             collection_cover_key = new_collection_cover_key
             set_collection_cover(
                 new_collection_cover_key,
@@ -526,7 +605,14 @@ def render_playlist(root, state, button_style):
             )
 
         current_uri = current_state.get("current_collection_uri")
-        if current_uri and current_uri != loaded_collection_uri:
+        liked_tracks_dirty = (
+            collection_type == "liked"
+            and current_state.get("liked_tracks_dirty")
+        )
+        if current_uri and (
+            current_uri != loaded_collection_uri
+            or liked_tracks_dirty
+        ):
             loaded_collection_uri = current_uri
             tracks_canvas.yview_moveto(0)
             current_state["collection_error"] = None
@@ -537,13 +623,16 @@ def render_playlist(root, state, button_style):
             current_state["current_collection_saved"] = None
             current_state["collection_library_loading"] = False
             current_state["collection_library_error"] = None
+            if collection_type == "liked":
+                current_state["liked_tracks_dirty"] = False
             tracks_signature = None
 
-            target = (
-                load_album
-                if current_state.get("current_collection_type") == "album"
-                else load_playlist
-            )
+            if current_state.get("current_collection_type") == "album":
+                target = load_album
+            elif current_state.get("current_collection_type") == "liked":
+                target = load_liked_tracks
+            else:
+                target = load_playlist
 
             Thread(target=target, daemon=True).start()
 
@@ -552,13 +641,13 @@ def render_playlist(root, state, button_style):
                 Thread(target=load_album_library_status, daemon=True).start()
 
         if collection_type == "album":
-            album_save_button.place(relx=1, x=-12, y=12, anchor="ne")
+            album_save_button.place(relx=1, rely=1, x=-2, y=-12, anchor="se")
             collection_meta.pack_configure(padx=(0, 58))
 
             if current_state.get("collection_library_loading"):
                 is_saved = bool(current_state.get("current_collection_saved"))
                 album_save_button.config(
-                    text="♥" if is_saved else "♡",
+                    text="＋",
                     fg=ACCENT if is_saved else TEXT_MUTED,
                     state="disabled",
                     cursor="arrow",
@@ -566,7 +655,7 @@ def render_playlist(root, state, button_style):
             else:
                 is_saved = bool(current_state.get("current_collection_saved"))
                 album_save_button.config(
-                    text="♥" if is_saved else "♡",
+                    text="＋",
                     fg=ACCENT if is_saved else TEXT,
                     state="normal",
                     cursor="hand2",

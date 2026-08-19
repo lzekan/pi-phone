@@ -222,6 +222,27 @@ def get_user_albums():
 
     return albums
 
+
+def get_saved_tracks(limit=10, offset=0):
+    token = _get_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = requests.get(
+        "https://api.spotify.com/v1/me/tracks",
+        headers=headers,
+        params={"limit": limit, "offset": offset},
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    data = response.json()
+    items = data.get("items", [])
+
+    return {
+        "items": items,
+        "next_offset": offset + len(items) if data.get("next") else None,
+        "total": data.get("total", len(items)),
+    }
+
 def is_library_item_saved(uri):
     token = _get_token()
     headers = {"Authorization": f"Bearer {token}"}

@@ -1,6 +1,6 @@
 import time
 from queue import Queue
-from threading import Thread
+from threading import Lock, Thread
 
 from app.core.state import get_song_state, get_state
 from app.services import playback_coordinator
@@ -10,6 +10,7 @@ from app.features.spotify.controllers import queue as queue_controller
 
 _command_queue = Queue()
 _command_generation = 0
+_library_lock = Lock()
 
 
 def _command_worker():
@@ -36,6 +37,67 @@ def _next_command_generation():
 
 def _run_async(command, on_error=None):
     _command_queue.put((command, on_error))
+
+
+def load_current_track_library_status(track_id):
+    state = get_state()
+    song = state["song"]
+    if song.get("source") != "spotify" or song.get("track_id") != track_id:
+        return
+
+    track_uri = f"spotify:track:{track_id}"
+    state["track_library_loading"] = True
+    state["track_library_error"] = None
+
+    with _library_lock:
+        try:
+            saved = spotify_service.is_library_item_saved(track_uri)
+            if get_song_state().get("track_id") == track_id:
+                state["current_track_saved"] = saved
+        except Exception as error:
+            if get_song_state().get("track_id") == track_id:
+                state["track_library_error"] = str(error)
+        finally:
+            if get_song_state().get("track_id") == track_id:
+                state["track_library_loading"] = False
+
+
+def toggle_current_track_saved():
+    state = get_state()
+    song = state["song"]
+    track_id = song.get("track_id")
+    if song.get("source") != "spotify" or not track_id:
+        return
+
+    track_uri = f"spotify:track:{track_id}"
+    state["track_library_loading"] = True
+    state["track_library_error"] = None
+
+    with _library_lock:
+        try:
+            if get_song_state().get("track_id") != track_id:
+                return
+
+            was_saved = bool(state.get("current_track_saved"))
+            if was_saved:
+                spotify_service.remove_library_item(track_uri)
+            else:
+                spotify_service.save_library_item(track_uri)
+
+            if get_song_state().get("track_id") != track_id:
+                return
+
+            state["current_track_saved"] = not was_saved
+            state["liked_tracks_dirty"] = True
+
+            return not was_saved
+
+        except Exception as error:
+            if get_song_state().get("track_id") == track_id:
+                state["track_library_error"] = str(error)
+        finally:
+            if get_song_state().get("track_id") == track_id:
+                state["track_library_loading"] = False
 
 def on_toggle_play():
     song_state = get_song_state()

@@ -33,6 +33,9 @@ def _load_collection_page(collection_type, reset):
         if collection_type == "album":
             album_id = collection_uri.split(":")[-1]
             page = spotify_service.get_album_tracks(album_id, PAGE_SIZE, offset)
+        elif collection_type == "liked":
+            album_id = None
+            page = spotify_service.get_saved_tracks(PAGE_SIZE, offset)
         else:
             album_id = None
             page = spotify_service.get_playlist_tracks(collection_uri, PAGE_SIZE, offset)
@@ -85,9 +88,13 @@ def load_album():
     _load_collection_page("album", reset=True)
 
 
+def load_liked_tracks():
+    _load_collection_page("liked", reset=True)
+
+
 def load_more_collection():
     collection_type = get_state().get("current_collection_type")
-    if collection_type in ("playlist", "album"):
+    if collection_type in ("playlist", "album", "liked"):
         _load_collection_page(collection_type, reset=False)
 
 
