@@ -52,6 +52,15 @@ def stop_playback():
         _stop_playback_unlocked()
 
 
+def is_playback_active():
+    with _process_lock:
+        process = _process
+
+    return (
+        process is not None and process.poll() is None
+    ) or os.path.exists(MPV_SOCKET)
+
+
 def play_file(path):
     global _process
 

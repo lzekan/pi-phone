@@ -22,7 +22,10 @@ def play_spotify(uri, context_uri=None):
     with _switch_lock:
         state = get_state()
 
-        if state.get("playback_owner") == "local":
+        if (
+            state.get("playback_owner") == "local"
+            or playback_service.is_playback_active()
+        ):
             playback_service.stop_playback()
             state["playback_owner"] = None
 
