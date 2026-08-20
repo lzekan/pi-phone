@@ -20,7 +20,6 @@ track_change_start = 0
 
 TRACK_CHANGE_TIMEOUT = 15
 TRACK_CHANGE_SETTLE_TIME = 0.35
-UNEXPECTED_TRACK_FALLBACK_TIME = 2
 SEEK_CONFIRM_TIMEOUT = 5
 SEEK_CONFIRM_TOLERANCE_MS = 1500
 
@@ -93,15 +92,9 @@ def start_sync(root):
 
             if pending_track_change:
                 if expected_track_after_change is not None:
-                    expected_track_started = (
+                    changed = (
                         incoming_track_id == expected_track_after_change
                     )
-                    unexpected_track_started = (
-                        incoming_track_id != track_before_change
-                        and now - track_change_start
-                        >= UNEXPECTED_TRACK_FALLBACK_TIME
-                    )
-                    changed = expected_track_started or unexpected_track_started
                 else:
                     changed = incoming_track_id != track_before_change
 
