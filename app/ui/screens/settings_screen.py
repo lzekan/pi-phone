@@ -6,6 +6,7 @@ from app.controller.controller_navigation import go_launcher
 from app.services import (
     audio_output_service,
     battery_service,
+    bluetooth_service,
     device_info_service,
     settings_service,
 )
@@ -81,20 +82,29 @@ def _format_screen_timeout(seconds):
 
 def render_settings(root, _state):
     frame = Frame(root, bg=BG)
+
     output_value_label = None
     output_row_widgets = ()
+
     maximum_value_label = None
     maximum_row_widgets = ()
     maximum_pending = settings_service.get_maximum_volume()
+
     brightness_value_label = None
     brightness_row_widgets = ()
     brightness_pending = settings_service.get_brightness()
+
     timeout_value_label = None
     timeout_row_widgets = ()
     timeout_pending = settings_service.get_screen_timeout()
+
     information_row_widgets = ()
     battery_value_label = None
     battery_row_widgets = ()
+
+    bluetooth_value_label = None
+    bluetooth_row_widgets = ()
+
 
     header = Frame(frame, bg=BG)
     header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
@@ -282,7 +292,10 @@ def render_settings(root, _state):
                 value,
                 index == len(rows) - 1,
             )
-            if title == "Audio output":
+            if title == "Bluetooth":
+                bluetooth_row_widgets = row_widgets
+                bluetooth_value_label = value_label
+            elif title == "Audio output":
                 output_row_widgets = row_widgets
                 output_value_label = value_label
             elif title == "Maximum volume":
@@ -313,6 +326,434 @@ def render_settings(root, _state):
         justify="center",
         font=(FONT, 9),
     ).pack(padx=PAGE_PAD, pady=(0, 24))
+
+    bluetooth_panel = Frame(frame, bg=BG)
+
+    bluetooth_header = Frame(bluetooth_panel, bg=BG)
+    bluetooth_header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
+
+    Button(
+        bluetooth_header,
+        text="‹",
+        command=lambda: bluetooth_panel.place_forget(),
+        fg=TEXT,
+        bg=SURFACE_ALT,
+        activeforeground=TEXT,
+        activebackground=CARD,
+        font=(FONT, 22, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        width=3,
+        pady=0,
+    ).pack(side=LEFT)
+
+    bluetooth_heading = Frame(bluetooth_header, bg=BG)
+    bluetooth_heading.pack(side=LEFT, padx=(12, 0))
+
+    Label(
+        bluetooth_heading,
+        text="CONNECTIONS",
+        fg=ACCENT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 9, "bold"),
+    ).pack(fill=X)
+
+    Label(
+        bluetooth_heading,
+        text="Bluetooth",
+        fg=TEXT,
+        bg=BG,
+        anchor="w",
+        font=(FONT, 22, "bold"),
+    ).pack(fill=X)
+
+    bluetooth_canvas = Canvas(
+        bluetooth_panel,
+        bg=BG,
+        highlightthickness=0,
+        borderwidth=0,
+    )
+    bluetooth_canvas.pack(
+        fill=BOTH,
+        expand=True,
+        padx=PAGE_PAD,
+        pady=(4, 18),
+    )
+
+    bluetooth_body = Frame(bluetooth_canvas, bg=BG)
+    bluetooth_window = bluetooth_canvas.create_window(
+        0,
+        0,
+        anchor="nw",
+        window=bluetooth_body,
+    )
+
+    bluetooth_body.bind(
+        "<Configure>",
+        lambda _event: bluetooth_canvas.configure(
+            scrollregion=bluetooth_canvas.bbox("all")
+        ),
+    )
+    bluetooth_canvas.bind(
+        "<Configure>",
+        lambda event: bluetooth_canvas.itemconfigure(
+            bluetooth_window,
+            width=event.width,
+        ),
+    )
+
+    bluetooth_drag_start_y = 0
+    bluetooth_dragged = False
+
+    def start_bluetooth_drag(event):
+        nonlocal bluetooth_drag_start_y, bluetooth_dragged
+        bluetooth_drag_start_y = event.y_root
+        bluetooth_dragged = False
+        bluetooth_canvas.scan_mark(
+            0,
+            event.y_root - bluetooth_canvas.winfo_rooty(),
+        )
+
+    def drag_bluetooth(event):
+        nonlocal bluetooth_dragged
+        if abs(event.y_root - bluetooth_drag_start_y) > 5:
+            bluetooth_dragged = True
+        bluetooth_canvas.scan_dragto(
+            0,
+            event.y_root - bluetooth_canvas.winfo_rooty(),
+            gain=1,
+        )
+
+    def finish_bluetooth_device_press(_event, device):
+        if not bluetooth_dragged:
+            select_bluetooth_device(device)
+
+    def bind_bluetooth_drag(widget, device=None):
+        widget.bind("<ButtonPress-1>", start_bluetooth_drag)
+        widget.bind("<B1-Motion>", drag_bluetooth)
+        widget.bind(
+            "<MouseWheel>",
+            lambda event: bluetooth_canvas.yview_scroll(
+                -1 if event.delta > 0 else 1,
+                "units",
+            ),
+        )
+        if device is not None:
+            widget.bind(
+                "<ButtonRelease-1>",
+                lambda event, selected=device: (
+                    finish_bluetooth_device_press(event, selected)
+                ),
+            )
+
+    bind_bluetooth_drag(bluetooth_canvas)
+    bind_bluetooth_drag(bluetooth_body)
+
+    def clear_bluetooth_body():
+        for child in bluetooth_body.winfo_children():
+            child.destroy()
+        bluetooth_canvas.yview_moveto(0)
+
+
+    def show_bluetooth_message(message, color=TEXT_MUTED):
+        clear_bluetooth_body()
+        Label(
+            bluetooth_body,
+            text=message,
+            fg=color,
+            bg=BG,
+            justify="center",
+            wraplength=400,
+            font=(FONT, 11),
+        ).pack(fill=X, pady=60)
+
+
+    def update_bluetooth_summary(devices):
+        if (
+            bluetooth_value_label is None
+            or not bluetooth_value_label.winfo_exists()
+        ):
+            return
+
+        connected = next(
+            (device for device in devices if device["connected"]),
+            None,
+        )
+
+        bluetooth_value_label.config(
+            text=connected["name"] if connected else "Manage devices"
+        )
+
+    def select_bluetooth_device(device):
+        if device["connected"]:
+            action_text = f'Disconnecting {device["name"]}...'
+        elif device["paired"]:
+            action_text = f'Connecting to {device["name"]}...'
+        else:
+            action_text = f'Pairing with {device["name"]}...'
+
+        show_bluetooth_message(action_text)
+
+        def worker():
+            try:
+                if device["connected"]:
+                    bluetooth_service.disconnect_device(device["mac"])
+                elif device["paired"]:
+                    bluetooth_service.connect_device(device["mac"])
+                else:
+                    bluetooth_service.pair_device(device["mac"])
+
+                devices = bluetooth_service.get_devices()
+                root.after(
+                    0,
+                    lambda found=devices: show_bluetooth_devices(found),
+                )
+            except Exception as error:
+                message = str(error)
+                root.after(
+                    0,
+                    lambda text=message: show_bluetooth_error(text),
+                )
+
+        Thread(target=worker, daemon=True).start()
+
+    def show_bluetooth_error(message):
+        show_bluetooth_message(
+            f"Bluetooth unavailable\n\n{message}",
+            DANGER,
+        )
+
+        Button(
+            bluetooth_body,
+            text="Try again",
+            command=lambda: load_bluetooth_devices(),
+            fg=TEXT,
+            bg=SURFACE_ALT,
+            activeforeground=TEXT,
+            activebackground=SURFACE_ACTIVE,
+            font=(FONT, 10, "bold"),
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            takefocus=False,
+            padx=14,
+            pady=9,
+        ).pack()
+
+    def show_bluetooth_devices(devices):
+        clear_bluetooth_body()
+        update_bluetooth_summary(devices)
+
+        Label(
+            bluetooth_body,
+            text="AVAILABLE DEVICES",
+            fg=TEXT_DIM,
+            bg=BG,
+            anchor="w",
+            font=(FONT, 9, "bold"),
+        ).pack(fill=X, padx=3, pady=(0, 7))
+
+        if not devices:
+            Label(
+                bluetooth_body,
+                text="No Bluetooth devices found.",
+                fg=TEXT_MUTED,
+                bg=CARD,
+                font=(FONT, 11),
+                padx=16,
+                pady=22,
+            ).pack(fill=X)
+        else:
+            for device in devices:
+                if device["connected"]:
+                    status = "Connected"
+                    background = ACCENT
+                elif device["paired"]:
+                    status = "Paired"
+                    background = CARD
+                else:
+                    status = "Tap to pair"
+                    background = CARD
+
+                device_row = Frame(
+                    bluetooth_body,
+                    bg=background,
+                    height=62,
+                    highlightbackground=DIVIDER,
+                    highlightthickness=1,
+                    cursor="hand2",
+                )
+                device_row.pack(fill=X, pady=(0, 8))
+                device_row.pack_propagate(False)
+
+                if device["paired"]:
+                    forget_button = Button(
+                        device_row,
+                        text="Forget",
+                        fg=DANGER,
+                        bg=SURFACE_ALT,
+                        activeforeground=TEXT,
+                        activebackground=DANGER,
+                        font=(FONT, 8, "bold"),
+                        relief="flat",
+                        borderwidth=0,
+                        highlightthickness=0,
+                        takefocus=False,
+                        padx=9,
+                        pady=6,
+                    )
+                    forget_button.config(
+                        command=lambda selected=device, button=forget_button: (
+                            confirm_forget_device(selected, button)
+                        )
+                    )
+                    forget_button.pack(
+                        side=RIGHT,
+                        padx=(6, 10),
+                        pady=12,
+                    )
+
+                device_name = Label(
+                    device_row,
+                    text=device["name"],
+                    fg=TEXT,
+                    bg=background,
+                    anchor="w",
+                    font=(FONT, 11, "bold"),
+                    cursor="hand2",
+                )
+                device_name.pack(fill=X, padx=16, pady=(9, 0))
+
+                device_status = Label(
+                    device_row,
+                    text=status,
+                    fg=TEXT if device["connected"] else TEXT_MUTED,
+                    bg=background,
+                    anchor="w",
+                    font=(FONT, 9),
+                    cursor="hand2",
+                )
+                device_status.pack(fill=X, padx=16, pady=(1, 8))
+
+                for widget in (device_row, device_name, device_status):
+                    bind_bluetooth_drag(widget, device)
+
+        Button(
+            bluetooth_body,
+            text="Scan for devices",
+            command=lambda: load_bluetooth_devices(scan=True),
+            fg=TEXT,
+            bg=SURFACE_ALT,
+            activeforeground=TEXT,
+            activebackground=SURFACE_ACTIVE,
+            font=(FONT, 10, "bold"),
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            takefocus=False,
+            padx=14,
+            pady=9,
+        ).pack(pady=(12, 0))
+
+    def load_bluetooth_devices(scan=False, show_panel=True):
+        if show_panel:
+            bluetooth_panel.place(
+                x=0,
+                y=0,
+                relwidth=1,
+                relheight=1,
+            )
+            bluetooth_panel.lift()
+
+            show_bluetooth_message(
+                "Scanning for Bluetooth devices..."
+                if scan
+                else "Loading Bluetooth devices..."
+            )
+
+        def worker():
+            try:
+                if scan:
+                    devices = bluetooth_service.scan_devices()
+                else:
+                    devices = bluetooth_service.get_devices()
+
+                if show_panel:
+                    root.after(
+                        0,
+                        lambda found=devices: (
+                            show_bluetooth_devices(found)
+                        ),
+                    )
+                else:
+                    root.after(
+                        0,
+                        lambda found=devices: (
+                            update_bluetooth_summary(found)
+                        ),
+                    )
+            except Exception as error:
+                if show_panel:
+                    message = str(error)
+                    root.after(
+                        0,
+                        lambda text=message: (
+                            show_bluetooth_error(text)
+                        ),
+                    )
+
+        Thread(target=worker, daemon=True).start()
+
+    def forget_bluetooth_device(device):
+        show_bluetooth_message(
+            f'Forgetting {device["name"]}...'
+        )
+
+        def worker():
+            try:
+                bluetooth_service.remove_device(device["mac"])
+                devices = bluetooth_service.get_devices()
+
+                root.after(
+                    0,
+                    lambda found=devices: (
+                        show_bluetooth_devices(found)
+                    ),
+                )
+            except Exception as error:
+                message = str(error)
+                root.after(
+                    0,
+                    lambda text=message: (
+                        show_bluetooth_error(text)
+                    ),
+                )
+
+        Thread(target=worker, daemon=True).start()
+
+    def confirm_forget_device(device, button):
+        if button.cget("text") == "Confirm":
+            forget_bluetooth_device(device)
+            return
+
+        button.config(
+            text="Confirm",
+            fg=TEXT,
+            bg=DANGER,
+        )
+
+        def reset_button():
+            if button.winfo_exists():
+                button.config(
+                    text="Forget",
+                    fg=DANGER,
+                    bg=SURFACE_ALT,
+                )
+
+        root.after(2500, reset_button)
 
     output_panel = Frame(frame, bg=BG)
     output_header = Frame(output_panel, bg=BG)
@@ -1472,6 +1913,10 @@ def render_settings(root, _state):
     def mousewheel(event):
         canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
 
+    def finish_bluetooth_press(event):
+        if abs(event.y_root - drag_start_y) <= 4:
+            load_bluetooth_devices()
+
     def finish_output_press(event):
         if abs(event.y_root - drag_start_y) <= 4:
             load_output_devices(True)
@@ -1507,6 +1952,13 @@ def render_settings(root, _state):
     canvas.bind("<ButtonPress-1>", start_drag)
     canvas.bind("<B1-Motion>", drag)
     canvas.bind("<MouseWheel>", mousewheel)
+
+    for widget in bluetooth_row_widgets:
+        widget.config(cursor="hand2")
+        widget.bind(
+            "<ButtonRelease-1>",
+            finish_bluetooth_press,
+        )
 
     for widget in output_row_widgets:
         widget.config(cursor="hand2")
@@ -1545,6 +1997,7 @@ def render_settings(root, _state):
         )
 
     def on_show():
+        bluetooth_panel.place_forget()
         close_output_panel()
         maximum_panel.place_forget()
         brightness_panel.place_forget()
@@ -1569,6 +2022,7 @@ def render_settings(root, _state):
                 )
             )
 
+        load_bluetooth_devices(show_panel=False)
         load_output_devices()
 
     return {
