@@ -5,15 +5,27 @@ import requests
 import time
 import json
 import os
+import socket
+import select
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+
 TOKEN_FILE = "/home/lukaz/pi-phone/tokens/tokens.json"
 SONG_STATE_FILE = "/home/lukaz/pi-phone/state/song_state.json"
 RECENT_TRACKS_FILE = "/home/lukaz/pi-phone/state/recent_tracks.json"
+POLL_SOCKET_PATH = "/tmp/piphone-spotify-poll.sock"
+
 PRELOAD_BEFORE_END_MS = 30000
 QUEUE_REFRESH_SECONDS = 5
-POLL_SECONDS = 3
+
+PLAYING_POLL_SECONDS = 3
+PAUSED_POLL_SECONDS = 5
+INACTIVE_POLL_SECONDS = 15
+
+ERROR_INITIAL_POLL_SECONDS = 5
+ERROR_MAX_POLL_SECONDS = 30
+
 RECENT_TRACKS_LIMIT = 5
 REQUEST_TIMEOUT = (3.05, 10)
 
@@ -131,13 +143,41 @@ def get_access_token():
     return access_token, expires_in
 
 
+def create_poll_socket():
+    try:
+        os.unlink(POLL_SOCKET_PATH)
+    except FileNotFoundError:
+        pass
+
+    poll_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    poll_socket.bind(POLL_SOCKET_PATH)
+    poll_socket.setblocking(False)
+    return poll_socket
+
+def wait_for_next_poll(poll_socket, timeout):
+    readable, _, _ = select.select(
+        [poll_socket],
+        [],
+        [],
+        timeout,
+    )
+
+    if not readable:
+        return
+
+    while True:
+        try:
+            poll_socket.recv(64)
+        except BlockingIOError:
+            break
+
 while True:
     try:
         access_token, expires_in = get_access_token()
         break
     except (requests.ConnectionError, requests.Timeout) as error:
-        print(f"[WARN] Token connection failed: {error}. Retrying in {POLL_SECONDS}s")
-        time.sleep(POLL_SECONDS)
+        print(f"[WARN] Token connection failed: {error}. Retrying in {PLAYING_POLL_SECONDS}s")
+        time.sleep(PLAYING_POLL_SECONDS)
 
 token_expiry_time = time.time() + expires_in
 
@@ -151,7 +191,10 @@ last_queue_fetch = 0
 last_track_id = None
 recent_history = load_recent_tracks()
 save_recent_tracks(recent_history)
+poll_socket = create_poll_socket()
 
+poll_seconds = PLAYING_POLL_SECONDS
+error_poll_seconds = ERROR_INITIAL_POLL_SECONDS
 
 while True:
     remaining = int(token_expiry_time - time.time())
@@ -165,8 +208,15 @@ while True:
             token_expiry_time = time.time() + expires_in
             headers["Authorization"] = f"Bearer {access_token}"
         except requests.RequestException as error:
-            print(f"[WARN] Token refresh failed: {error}. Retrying next cycle")
-            time.sleep(POLL_SECONDS)
+            print(
+                f"[WARN] Token refresh failed: {error}. "
+                f"Retrying in {error_poll_seconds}s"
+            )
+            wait_for_next_poll(poll_socket, error_poll_seconds)
+            error_poll_seconds = min(
+                error_poll_seconds * 2,
+                ERROR_MAX_POLL_SECONDS,
+            )
             continue
 
     try:
@@ -175,9 +225,18 @@ while True:
             headers=headers,
             timeout=REQUEST_TIMEOUT
         )
+        error_poll_seconds = ERROR_INITIAL_POLL_SECONDS
+
     except requests.RequestException as error:
-        print(f"[WARN] Spotify poll failed: {error}. Retrying next cycle")
-        time.sleep(POLL_SECONDS)
+        print(
+            f"[WARN] Spotify poll failed: {error}. "
+            f"Retrying in {error_poll_seconds}s"
+        )
+        wait_for_next_poll(poll_socket, error_poll_seconds)
+        error_poll_seconds = min(
+            error_poll_seconds * 2,
+            ERROR_MAX_POLL_SECONDS,
+        )
         continue
 
     if r.status_code == 200:
@@ -188,7 +247,14 @@ while True:
             image_url = images[0]["url"] if images else None
             track_id = data["item"]["id"]
 
+            poll_seconds = (
+                PLAYING_POLL_SECONDS
+                if data.get("is_playing")
+                else PAUSED_POLL_SECONDS
+            )
+
             new_track = track_id != last_track_id
+
             if new_track:
                 next_song = None
                 queue_tracks = []
@@ -243,12 +309,14 @@ while True:
             print(state)
 
         else:
+            poll_seconds = INACTIVE_POLL_SECONDS
             next_song = None
             queue_tracks = []
             save_inactive_state()
             print("Nothing playing")
 
     elif r.status_code == 204:
+        poll_seconds = INACTIVE_POLL_SECONDS
         next_song = None
         queue_tracks = []
         save_inactive_state()
@@ -272,4 +340,4 @@ while True:
     else:
         print("Error:", r.status_code)
 
-    time.sleep(POLL_SECONDS)
+    wait_for_next_poll(poll_socket, poll_seconds)

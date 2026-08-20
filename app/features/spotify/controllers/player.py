@@ -18,6 +18,7 @@ def _command_worker():
         command, on_error = _command_queue.get()
         try:
             command()
+            daemon_client.request_immediate_poll()
         except Exception as error:
             print(f"[SPOTIFY ERROR] {error}")
             if on_error:

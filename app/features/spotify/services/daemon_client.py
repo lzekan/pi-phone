@@ -1,8 +1,11 @@
 import json
 import os
 import time
+import socket
 from app.core.state import get_song_state, get_state
 from app.core.config import SONG_STATE_FILE, RECENT_TRACKS_FILE
+
+POLL_SOCKET_PATH = "/tmp/piphone-spotify-poll.sock"
 
 pending_seek_position = None
 seek_start_time = 0
@@ -21,6 +24,12 @@ UNEXPECTED_TRACK_FALLBACK_TIME = 2
 SEEK_CONFIRM_TIMEOUT = 5
 SEEK_CONFIRM_TOLERANCE_MS = 1500
 
+def request_immediate_poll():
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
+            client.sendto(b"poll", POLL_SOCKET_PATH)
+    except OSError:
+        pass
 
 def expect_track_change(expected_track_id=None):
     global pending_track_change, track_before_change, track_change_start
