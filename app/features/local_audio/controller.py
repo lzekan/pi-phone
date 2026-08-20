@@ -15,6 +15,7 @@ _launch_queue = Queue()
 _pending_seek_position = None
 _pending_seek_time = 0
 _seek_lock = Lock()
+_queue_lock = Lock()
 
 
 def _launch_worker():
@@ -91,7 +92,59 @@ def open_library():
         refresh_library()
 
 
-def _start_track(index):
+def add_to_queue(track):
+    queue_item = {
+        "queue_id": time.monotonic_ns(),
+        "track_id": track["path"],
+        "path": track["path"],
+        "track": track.get("title", ""),
+        "artist": track.get("artist", ""),
+        "album_name": track.get("album", ""),
+        "duration_ms": track.get("duration_ms", 1),
+        "image_url": None,
+        "committed": False,
+    }
+    with _queue_lock:
+        get_state()["local"]["queue"].append(queue_item)
+    return queue_item
+
+
+def remove_from_queue(queue_id):
+    with _queue_lock:
+        queue = get_state()["local"]["queue"]
+        for index, item in enumerate(queue):
+            if item.get("queue_id") == queue_id:
+                queue.pop(index)
+                return True
+    return False
+
+
+def _pop_queued_track_index(tracks):
+    with _queue_lock:
+        queue = get_state()["local"]["queue"]
+        while queue:
+            queued_path = queue.pop(0).get("path")
+            for index, track in enumerate(tracks):
+                if track.get("path") == queued_path:
+                    return index
+    return None
+
+
+def _next_track_target(current_index, tracks):
+    queued_index = _pop_queued_track_index(tracks)
+    if queued_index is not None:
+        return queued_index, True
+
+    sequence_index = get_state()["local"].get("sequence_index")
+    if sequence_index is None:
+        sequence_index = current_index
+    next_index = sequence_index + 1
+    if next_index < len(tracks):
+        return next_index, False
+    return None, False
+
+
+def _start_track(index, from_queue=False):
     global _pending_seek_position
 
     state = get_state()
@@ -106,6 +159,8 @@ def _start_track(index):
         _pending_seek_position = None
 
     state["local"]["current_index"] = index
+    if not from_queue:
+        state["local"]["sequence_index"] = index
     state["local"]["error"] = None
     state["next_song"] = None
     get_song_state().update({
@@ -140,9 +195,9 @@ def _start_track(index):
             if not _is_current(generation, track_path):
                 return
 
-            next_index = index + 1
-            if next_index < len(tracks):
-                _start_track(next_index)
+            next_index, next_from_queue = _next_track_target(index, tracks)
+            if next_index is not None:
+                _start_track(next_index, from_queue=next_from_queue)
             else:
                 song = get_song_state()
                 song["progress_ms"] = song["duration_ms"]
@@ -211,9 +266,15 @@ def on_seek(position_ms):
 
 
 def on_next():
-    index = get_state()["local"].get("current_index")
+    state = get_state()
+    index = state["local"].get("current_index")
     if index is not None:
-        _start_track(index + 1)
+        next_index, next_from_queue = _next_track_target(
+            index,
+            state["local"]["tracks"],
+        )
+        if next_index is not None:
+            _start_track(next_index, from_queue=next_from_queue)
 
 
 def on_prev():

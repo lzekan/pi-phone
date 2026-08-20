@@ -1,4 +1,5 @@
 from app.core.state import get_song_state
+from app.features.local_audio import controller as local_controller
 from app.features.spotify.controllers import queue as spotify_queue_controller
 
 
@@ -17,5 +18,8 @@ def remove_queue_item(queue_id):
 
     if source == "spotify":
         return spotify_queue_controller.remove_from_manual_queue(queue_id)
+
+    if source == "local":
+        return local_controller.remove_from_queue(queue_id)
 
     return False

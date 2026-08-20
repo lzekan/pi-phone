@@ -3,7 +3,11 @@ from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_launcher
 from app.core.config import MUSIC_LIBRARY_DIR
-from app.features.local_audio.controller import refresh_library, play_selected_file
+from app.features.local_audio.controller import (
+    add_to_queue,
+    play_selected_file,
+    refresh_library,
+)
 from app.ui.components.mini_player import create_mini_player
 from app.ui.theme import (
     ACCENT,
@@ -123,36 +127,87 @@ def render_local_library(root, _state, button_style):
             width=event.width,
         ),
     )
-    tracks_canvas.bind(
-        "<ButtonPress-1>",
-        lambda event: tracks_canvas.scan_mark(event.x, event.y),
-    )
-    tracks_canvas.bind(
-        "<B1-Motion>",
-        lambda event: tracks_canvas.scan_dragto(event.x, event.y, gain=1),
-    )
-
     mini_player = create_mini_player(root, frame, button_style)
 
-    def bind_play_file(widget, track_path):
-        widget.bind(
-            "<ButtonPress-1>",
-            lambda _event: play_selected_file(track_path)
-        )
+    queue_toast_after_id = None
+    queue_toast = Label(
+        frame,
+        text="Added to queue",
+        fg=TEXT,
+        bg=ACCENT,
+        font=(FONT, 10, "bold"),
+        padx=14,
+        pady=7,
+    )
 
-    def bind_touch_scroll(widget):
-        widget.bind(
-            "<ButtonPress-1>",
-            lambda event: tracks_canvas.scan_mark(event.x_root, event.y_root),
-        )
-        widget.bind(
-            "<B1-Motion>",
-            lambda event: tracks_canvas.scan_dragto(
-                event.x_root,
-                event.y_root,
-                gain=1,
-            ),
-        )
+    def show_queue_toast():
+        nonlocal queue_toast_after_id
+
+        if queue_toast_after_id is not None:
+            root.after_cancel(queue_toast_after_id)
+
+        queue_toast.place(relx=0.5, rely=0.82, anchor="center")
+        queue_toast.lift()
+
+        def hide_toast():
+            nonlocal queue_toast_after_id
+            queue_toast.place_forget()
+            queue_toast_after_id = None
+
+        queue_toast_after_id = root.after(2000, hide_toast)
+
+    drag_start_x = 0
+    drag_start_y = 0
+    drag_axis = None
+    dragged_details = None
+
+    def tracks_canvas_y(event):
+        return event.y_root - tracks_canvas.winfo_rooty()
+
+    def start_track_drag(event, details=None):
+        nonlocal drag_start_x, drag_start_y, drag_axis, dragged_details
+        drag_start_x = event.x_root
+        drag_start_y = event.y_root
+        drag_axis = None
+        dragged_details = details
+        tracks_canvas.scan_mark(0, tracks_canvas_y(event))
+
+    def drag_track(event):
+        nonlocal drag_axis
+        delta_x = event.x_root - drag_start_x
+        delta_y = event.y_root - drag_start_y
+
+        if drag_axis is None and max(abs(delta_x), abs(delta_y)) > 6:
+            drag_axis = "horizontal" if abs(delta_x) > abs(delta_y) else "vertical"
+
+        if drag_axis == "horizontal":
+            if dragged_details is not None and dragged_details.winfo_exists():
+                dragged_details.pack_configure(
+                    padx=(min(max(delta_x, 0), 76), 0)
+                )
+            return
+
+        if drag_axis == "vertical":
+            tracks_canvas.scan_dragto(0, tracks_canvas_y(event), gain=1)
+
+    def finish_track_drag(event, track=None):
+        nonlocal dragged_details
+        delta_x = event.x_root - drag_start_x
+
+        if dragged_details is not None and dragged_details.winfo_exists():
+            dragged_details.pack_configure(padx=0)
+        dragged_details = None
+
+        if drag_axis == "horizontal" and delta_x >= 60 and track:
+            add_to_queue(track)
+            show_queue_toast()
+        elif drag_axis is None and track:
+            play_selected_file(track["path"])
+
+    for widget in (tracks_canvas, tracks_frame):
+        widget.bind("<ButtonPress-1>", start_track_drag)
+        widget.bind("<B1-Motion>", drag_track)
+        widget.bind("<ButtonRelease-1>", finish_track_drag)
 
     rendered_signature = None
 
@@ -229,52 +284,72 @@ def render_local_library(root, _state, button_style):
             row.pack(fill=X, pady=4)
             row.pack_propagate(False)
 
-            Label(
+            index_label = Label(
                 row,
                 text=f"{index:02d}",
                 fg=ACCENT,
                 bg=CARD,
                 width=4,
                 font=(FONT, 11, "bold"),
-            ).pack(side=LEFT, padx=(8, 2))
+            )
+            index_label.pack(side=LEFT, padx=(8, 2))
 
             details = Frame(row, bg=CARD)
             details.pack(side=LEFT, fill=BOTH, expand=True, pady=13)
-            Label(
+            name_label = Label(
                 details,
                 text=track["title"],
                 fg=TEXT,
                 bg=CARD,
                 anchor="w",
                 font=(FONT, 12, "bold"),
-            ).pack(fill=X)
-            Label(
+            )
+            name_label.pack(fill=X)
+            artist_label = Label(
                 details,
                 text=track["artist"],
                 fg=TEXT_MUTED,
                 bg=CARD,
                 anchor="w",
                 font=(FONT, 10),
-            ).pack(fill=X, pady=(2, 0))
+            )
+            artist_label.pack(fill=X, pady=(2, 0))
 
             metadata = "  •  ".join([
                 track["format"],
                 _format_time(track["duration_ms"]),
                 _format_size(track["size_bytes"]),
             ])
-            Label(
+            metadata_label = Label(
                 details,
                 text=metadata,
                 fg=TEXT_DIM,
                 bg=CARD,
                 anchor="w",
                 font=(FONT, 8),
-            ).pack(fill=X, pady=(3, 0))
+            )
+            metadata_label.pack(fill=X, pady=(3, 0))
 
-            bind_touch_scroll(row)
-            for widget in (details, *row.winfo_children(), *details.winfo_children()):
-                # bind_touch_scroll(widget)
-                bind_play_file(widget, track["path"])
+            for widget in (
+                row,
+                index_label,
+                details,
+                name_label,
+                artist_label,
+                metadata_label,
+            ):
+                widget.bind(
+                    "<ButtonPress-1>",
+                    lambda event, info=details: start_track_drag(event, info),
+                )
+                widget.bind("<B1-Motion>", drag_track)
+                widget.bind(
+                    "<ButtonRelease-1>",
+                    lambda event, selected_track=track: finish_track_drag(
+                        event,
+                        selected_track,
+                    ),
+                )
 
     def update(current_state):
         rebuild(current_state["local"])
