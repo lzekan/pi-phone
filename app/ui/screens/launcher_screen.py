@@ -243,14 +243,6 @@ def render_launcher(root, _state):
         command=go_settings,
     )
 
-    Label(
-        frame,
-        text="Local music and device controls are the next step.",
-        fg=TEXT_DIM,
-        bg=BG,
-        font=(FONT, 9),
-    ).pack(pady=(8, 18))
-
     def update_clock():
         if not frame.winfo_exists():
             return

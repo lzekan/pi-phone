@@ -673,7 +673,7 @@ def render_home(root, state, button_style):
     ).pack(fill=X, pady=(20, 4))
 
     album_box = Frame(content, bg=BG, height=174)
-    album_box.pack(fill=X)
+    album_box.pack(fill=X, pady=(0, 24))
     album_box.pack_propagate(False)
     album_canvas = Canvas(album_box, bg=BG, highlightthickness=0)
     album_list = Frame(album_canvas, bg=BG)
