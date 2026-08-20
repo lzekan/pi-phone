@@ -9,6 +9,7 @@ from app.services import (
     bluetooth_service,
     device_info_service,
     settings_service,
+    device_power_service
 )
 from app.controller.controller_brightness import (
     preview_brightness,
@@ -105,6 +106,10 @@ def render_settings(root, _state):
     bluetooth_value_label = None
     bluetooth_row_widgets = ()
 
+    pending_power_action = None
+
+    restart_row_widgets = ()
+    shutdown_row_widgets = ()
 
     header = Frame(frame, bg=BG)
     header.pack(fill=X, padx=PAGE_PAD, pady=(20, 12))
@@ -316,16 +321,147 @@ def render_settings(root, _state):
             elif title == "Battery":
                 battery_row_widgets = row_widgets
                 battery_value_label = value_label
+            elif title == "Restart":
+                restart_row_widgets = row_widgets
+            elif title == "Shutdown":
+                shutdown_row_widgets = row_widgets
 
-    Label(
-        content,
-        text="Controls will be connected as each system service is added.",
-        fg=TEXT_DIM,
-        bg=BG,
-        wraplength=390,
+    power_panel = Frame(frame, bg=BG)
+
+    power_dialog = Frame(
+        power_panel,
+        bg=CARD,
+        highlightbackground=DIVIDER,
+        highlightthickness=1,
+    )
+    power_dialog.place(
+        relx=0.5,
+        rely=0.5,
+        anchor="center",
+        width=390,
+    )
+
+    power_title = Label(
+        power_dialog,
+        text="",
+        fg=TEXT,
+        bg=CARD,
+        font=(FONT, 20, "bold"),
+    )
+    power_title.pack(fill=X, padx=20, pady=(22, 8))
+
+    power_message = Label(
+        power_dialog,
+        text="",
+        fg=TEXT_MUTED,
+        bg=CARD,
         justify="center",
-        font=(FONT, 9),
-    ).pack(padx=PAGE_PAD, pady=(0, 24))
+        wraplength=340,
+        font=(FONT, 11),
+    )
+    power_message.pack(fill=X, padx=20)
+
+    power_buttons = Frame(power_dialog, bg=CARD)
+    power_buttons.pack(fill=X, padx=20, pady=20)
+
+    Button(
+        power_buttons,
+        text="Cancel",
+        command=lambda: power_panel.place_forget(),
+        fg=TEXT,
+        bg=SURFACE_ALT,
+        activeforeground=TEXT,
+        activebackground=SURFACE_ACTIVE,
+        font=(FONT, 10, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        padx=16,
+        pady=10,
+    ).pack(side=LEFT, expand=True, fill=X, padx=(0, 5))
+
+    power_confirm_button = Button(
+        power_buttons,
+        text="Confirm",
+        fg=TEXT,
+        bg=DANGER,
+        activeforeground=TEXT,
+        activebackground=DANGER,
+        font=(FONT, 10, "bold"),
+        relief="flat",
+        borderwidth=0,
+        highlightthickness=0,
+        takefocus=False,
+        padx=16,
+        pady=10,
+    )
+    power_confirm_button.pack(
+        side=RIGHT,
+        expand=True,
+        fill=X,
+        padx=(5, 0),
+    )
+
+    def open_power_confirmation(action):
+        nonlocal pending_power_action
+        pending_power_action = action
+
+        is_restart = action == "restart"
+        power_title.config(
+            text="Restart device?" if is_restart else "Shut down device?"
+        )
+        power_message.config(
+            text=(
+                "PiPhone will stop playback and restart."
+                if is_restart
+                else "PiPhone will safely stop playback and power off."
+            )
+        )
+        power_confirm_button.config(
+            text="Restart" if is_restart else "Shut down"
+        )
+
+        if not power_buttons.winfo_manager():
+            power_buttons.pack(fill=X, padx=20, pady=20)
+
+        power_panel.place(x=0, y=0, relwidth=1, relheight=1)
+        power_panel.lift()
+
+    def show_power_error(message):
+        power_title.config(text="Power action failed")
+        power_message.config(text=message)
+
+        if not power_buttons.winfo_manager():
+            power_buttons.pack(fill=X, padx=20, pady=20)
+
+    def execute_power_action():
+        action = pending_power_action
+        if action not in ("restart", "shutdown"):
+            return
+
+        power_title.config(
+            text="Restarting..." if action == "restart" else "Shutting down..."
+        )
+        power_message.config(text="Please wait. Do not disconnect power.")
+        power_buttons.pack_forget()
+
+        def worker():
+            try:
+                if action == "restart":
+                    device_power_service.restart_device()
+                else:
+                    device_power_service.shutdown_device()
+            except Exception as error:
+                message = str(error)
+                root.after(
+                    0,
+                    lambda text=message: show_power_error(text),
+                )
+
+        Thread(target=worker, daemon=True).start()
+
+    power_confirm_button.config(command=execute_power_action)
 
     bluetooth_panel = Frame(frame, bg=BG)
 
@@ -1941,6 +2077,14 @@ def render_settings(root, _state):
         if abs(event.y_root - drag_start_y) <= 4:
             open_battery_panel()
 
+    def finish_restart_press(event):
+        if abs(event.y_root - drag_start_y) <= 4:
+            open_power_confirmation("restart")
+
+    def finish_shutdown_press(event):
+        if abs(event.y_root - drag_start_y) <= 4:
+            open_power_confirmation("shutdown")
+
     def bind_scroll(widget):
         widget.bind("<ButtonPress-1>", start_drag)
         widget.bind("<B1-Motion>", drag)
@@ -1996,7 +2140,22 @@ def render_settings(root, _state):
             finish_battery_press,
         )
 
+    for widget in restart_row_widgets:
+        widget.config(cursor="hand2")
+        widget.bind(
+            "<ButtonRelease-1>",
+            finish_restart_press,
+        )
+
+    for widget in shutdown_row_widgets:
+        widget.config(cursor="hand2")
+        widget.bind(
+            "<ButtonRelease-1>",
+            finish_shutdown_press,
+        )
+
     def on_show():
+        power_panel.place_forget()
         bluetooth_panel.place_forget()
         close_output_panel()
         maximum_panel.place_forget()
