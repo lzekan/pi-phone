@@ -1,0 +1,15 @@
+[Unit]
+Description=PiPhone Spotify State Daemon
+Wants=piphone-spotify.service
+After=piphone-spotify.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/lukaz/pi-phone
+EnvironmentFile=/home/lukaz/pi-phone/.env
+ExecStart=/usr/bin/python3 -u /home/lukaz/pi-phone/software/spotify_daemon.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

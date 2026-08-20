@@ -1,0 +1,19 @@
+[Unit]
+Description=PiPhone Spotify Connect
+Wants=pipewire-pulse.service wireplumber.service
+After=pipewire-pulse.service wireplumber.service
+
+[Service]
+ExecStartPre=/usr/bin/python3 /home/lukaz/pi-phone/software/wait_for_network_time.py
+ExecStart=/usr/bin/librespot \
+    --name PiPhone \
+    --backend pulseaudio \
+    --cache %h/.cache/librespot \
+    --system-cache %h/.local/share/librespot \
+    --mixer softvol
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
