@@ -3,7 +3,7 @@ from tkinter import Frame
 from app.controller.controller_brightness import apply_saved_brightness
 from app.services.brightness_service import turn_off_backlight
 from app.services.settings_service import (
-    get_screen_timeout,
+    get_effective_screen_timeout,
     set_screen_timeout,
 )
 
@@ -76,7 +76,7 @@ def start_screen_timeout(root):
     global _root, _overlay, _timeout_seconds, _sleeping
 
     _root = root
-    _timeout_seconds = get_screen_timeout()
+    _timeout_seconds = get_effective_screen_timeout()
     _sleeping = False
 
     _overlay = Frame(root, bg="black", cursor="none")
@@ -91,7 +91,21 @@ def start_screen_timeout(root):
 def save_screen_timeout(value):
     global _timeout_seconds
 
-    _timeout_seconds = set_screen_timeout(value)
+    preferred = set_screen_timeout(value)
+    _timeout_seconds = get_effective_screen_timeout(preferred)
+
+    if _sleeping and _timeout_seconds == 0:
+        _wake()
+    else:
+        _schedule_timer()
+
+    return preferred
+
+
+def apply_saved_screen_timeout():
+    global _timeout_seconds
+
+    _timeout_seconds = get_effective_screen_timeout()
 
     if _sleeping and _timeout_seconds == 0:
         _wake()

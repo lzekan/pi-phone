@@ -7,6 +7,9 @@ from app.core.config import DEVICE_SETTINGS_FILE
 DEFAULT_MAXIMUM_VOLUME = 100
 DEFAULT_BRIGHTNESS = 100
 DEFAULT_SCREEN_TIMEOUT = 300
+DEFAULT_BATTERY_SAVER_ENABLED = False
+BATTERY_SAVER_BRIGHTNESS = 40
+BATTERY_SAVER_SCREEN_TIMEOUT = 30
 SCREEN_TIMEOUT_OPTIONS = (0, 30, 60, 120, 300)
 
 _settings_lock = Lock()
@@ -79,6 +82,38 @@ def set_brightness(value):
     return value
 
 
+def get_battery_saver_enabled():
+    with _settings_lock:
+        settings = _read_settings_unlocked()
+
+    value = settings.get(
+        "battery_saver_enabled",
+        DEFAULT_BATTERY_SAVER_ENABLED,
+    )
+    return value if isinstance(value, bool) else DEFAULT_BATTERY_SAVER_ENABLED
+
+
+def set_battery_saver_enabled(enabled):
+    enabled = bool(enabled)
+
+    with _settings_lock:
+        settings = _read_settings_unlocked()
+        settings["battery_saver_enabled"] = enabled
+        _write_settings_unlocked(settings)
+
+    return enabled
+
+
+def get_effective_brightness(preferred=None):
+    if preferred is None:
+        preferred = get_brightness()
+
+    preferred = max(10, min(100, int(preferred)))
+    if get_battery_saver_enabled():
+        return min(preferred, BATTERY_SAVER_BRIGHTNESS)
+    return preferred
+
+
 def get_screen_timeout():
     with _settings_lock:
         settings = _read_settings_unlocked()
@@ -104,3 +139,15 @@ def set_screen_timeout(value):
         _write_settings_unlocked(settings)
 
     return value
+
+
+def get_effective_screen_timeout(preferred=None):
+    if preferred is None:
+        preferred = get_screen_timeout()
+
+    preferred = int(preferred)
+    if not get_battery_saver_enabled():
+        return preferred
+    if preferred == 0:
+        return BATTERY_SAVER_SCREEN_TIMEOUT
+    return min(preferred, BATTERY_SAVER_SCREEN_TIMEOUT)

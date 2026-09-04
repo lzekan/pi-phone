@@ -16,6 +16,7 @@ from app.controller.controller_brightness import (
     preview_brightness,
     save_brightness,
 )
+from app.controller.controller_battery_saver import set_battery_saver
 from app.controller.controller_screen_timeout import save_screen_timeout
 from app.ui.theme import (
     ACCENT,
@@ -60,7 +61,7 @@ SETTINGS_SECTIONS = (
         "Power",
         (
             ("BA", "Battery", "Battery status"),
-            ("LB", "Low battery shutdown", "10%"),
+            ("LB", "Battery saver", "Off"),
         ),
     ),
     (
@@ -103,6 +104,10 @@ def render_settings(root, _state):
     information_row_widgets = ()
     battery_value_label = None
     battery_row_widgets = ()
+    battery_saver_value_label = None
+    battery_saver_row_widgets = ()
+    battery_saver_switch = None
+    battery_saver_enabled = settings_service.get_battery_saver_enabled()
 
     bluetooth_value_label = None
     bluetooth_row_widgets = ()
@@ -327,10 +332,107 @@ def render_settings(root, _state):
             elif title == "Battery":
                 battery_row_widgets = row_widgets
                 battery_value_label = value_label
+            elif title == "Battery saver":
+                battery_saver_row_widgets = row_widgets
+                battery_saver_value_label = value_label
             elif title == "Restart":
                 restart_row_widgets = row_widgets
             elif title == "Shutdown":
                 shutdown_row_widgets = row_widgets
+
+    if battery_saver_row_widgets:
+        battery_saver_right = battery_saver_row_widgets[4]
+        battery_saver_chevron = battery_saver_row_widgets[6]
+        battery_saver_chevron.pack_forget()
+
+        battery_saver_switch = Canvas(
+            battery_saver_right,
+            width=52,
+            height=30,
+            bg=CARD,
+            highlightthickness=0,
+            borderwidth=0,
+            cursor="hand2",
+        )
+        battery_saver_switch.pack(side=RIGHT, padx=(10, 0))
+
+    def draw_battery_saver_switch():
+        if battery_saver_switch is None:
+            return
+
+        battery_saver_switch.delete("all")
+        track_color = ACCENT if battery_saver_enabled else DIVIDER
+        knob_x = 37 if battery_saver_enabled else 15
+
+        battery_saver_switch.create_rectangle(
+            15,
+            4,
+            37,
+            26,
+            fill=track_color,
+            outline=track_color,
+        )
+        battery_saver_switch.create_oval(
+            4,
+            4,
+            26,
+            26,
+            fill=track_color,
+            outline=track_color,
+        )
+        battery_saver_switch.create_oval(
+            26,
+            4,
+            48,
+            26,
+            fill=track_color,
+            outline=track_color,
+        )
+        battery_saver_switch.create_oval(
+            knob_x - 9,
+            6,
+            knob_x + 9,
+            24,
+            fill=TEXT,
+            outline=TEXT,
+        )
+
+        if battery_saver_value_label is not None:
+            battery_saver_value_label.config(
+                text="On" if battery_saver_enabled else "Off",
+                fg=ACCENT if battery_saver_enabled else TEXT_MUTED,
+            )
+
+    def refresh_display_setting_labels():
+        preferred_brightness = settings_service.get_brightness()
+        preferred_timeout = settings_service.get_screen_timeout()
+
+        if battery_saver_enabled:
+            brightness_text = (
+                f"{settings_service.get_effective_brightness()}% · Saver"
+            )
+            timeout_text = (
+                f"{_format_screen_timeout(settings_service.get_effective_screen_timeout())}"
+                " · Saver"
+            )
+        else:
+            brightness_text = f"{preferred_brightness}%"
+            timeout_text = _format_screen_timeout(preferred_timeout)
+
+        if (
+            brightness_value_label is not None
+            and brightness_value_label.winfo_exists()
+        ):
+            brightness_value_label.config(text=brightness_text)
+
+        if (
+            timeout_value_label is not None
+            and timeout_value_label.winfo_exists()
+        ):
+            timeout_value_label.config(text=timeout_text)
+
+    draw_battery_saver_switch()
+    refresh_display_setting_labels()
 
     wifi_panel = WifiPanel(frame, _state, wifi_value_label)
     power_panel = Frame(frame, bg=BG)
@@ -1512,11 +1614,20 @@ def render_settings(root, _state):
             return
 
         brightness_pending = saved_value
-        brightness_value_label.config(text=f"{saved_value}%")
-        brightness_status.config(
-            text="Brightness saved",
-            fg=ACCENT,
-        )
+        refresh_display_setting_labels()
+        if battery_saver_enabled:
+            brightness_status.config(
+                text=(
+                    "Saved. Battery Saver currently limits "
+                    f"brightness to {settings_service.get_effective_brightness()}%."
+                ),
+                fg=TEXT_MUTED,
+            )
+        else:
+            brightness_status.config(
+                text="Brightness saved",
+                fg=ACCENT,
+            )
         brightness_save.config(state=NORMAL)
 
     def open_brightness_panel():
@@ -1527,7 +1638,17 @@ def render_settings(root, _state):
         timeout_panel.place_forget()
 
         brightness_pending = settings_service.get_brightness()
-        brightness_status.config(text="", fg=TEXT_MUTED)
+        if battery_saver_enabled:
+            brightness_status.config(
+                text=(
+                    "Battery Saver currently limits brightness to "
+                    f"{settings_service.get_effective_brightness()}%. "
+                    f"Saved value: {brightness_pending}%."
+                ),
+                fg=TEXT_MUTED,
+            )
+        else:
+            brightness_status.config(text="", fg=TEXT_MUTED)
 
         brightness_panel.place(
             x=0,
@@ -1589,6 +1710,18 @@ def render_settings(root, _state):
     timeout_body = Frame(timeout_panel, bg=BG)
     timeout_body.pack(fill=BOTH, expand=True, padx=PAGE_PAD, pady=(14, 18))
 
+    timeout_status = Label(
+        timeout_body,
+        text="",
+        fg=TEXT_MUTED,
+        bg=BG,
+        anchor="w",
+        justify="left",
+        wraplength=410,
+        font=(FONT, 9),
+    )
+    timeout_status.pack(fill=X, pady=(0, 8))
+
     timeout_choice_buttons = {}
 
     def refresh_timeout_choices():
@@ -1610,10 +1743,16 @@ def render_settings(root, _state):
             print(f"[SCREEN TIMEOUT ERROR] {error}")
             return
 
-        if timeout_value_label is not None and timeout_value_label.winfo_exists():
-            timeout_value_label.config(
-                text=_format_screen_timeout(timeout_pending)
+        refresh_display_setting_labels()
+        if battery_saver_enabled:
+            timeout_status.config(
+                text=(
+                    "Saved. Battery Saver currently limits timeout to "
+                    f"{_format_screen_timeout(settings_service.get_effective_screen_timeout())}."
+                )
             )
+        else:
+            timeout_status.config(text="")
         refresh_timeout_choices()
 
     for seconds in settings_service.SCREEN_TIMEOUT_OPTIONS:
@@ -1642,6 +1781,16 @@ def render_settings(root, _state):
         maximum_panel.place_forget()
         brightness_panel.place_forget()
         timeout_pending = settings_service.get_screen_timeout()
+        if battery_saver_enabled:
+            timeout_status.config(
+                text=(
+                    "Battery Saver currently limits timeout to "
+                    f"{_format_screen_timeout(settings_service.get_effective_screen_timeout())}. "
+                    f"Saved value: {_format_screen_timeout(timeout_pending)}."
+                )
+            )
+        else:
+            timeout_status.config(text="")
         refresh_timeout_choices()
         timeout_panel.place(x=0, y=0, relwidth=1, relheight=1)
         timeout_panel.lift()
@@ -2088,6 +2237,31 @@ def render_settings(root, _state):
         if abs(event.y_root - drag_start_y) <= 4:
             open_battery_panel()
 
+    def finish_battery_saver_press(event):
+        nonlocal battery_saver_enabled
+
+        if abs(event.y_root - drag_start_y) > 4:
+            return
+
+        requested = not battery_saver_enabled
+        try:
+            result = set_battery_saver(requested)
+            battery_saver_enabled = result["enabled"]
+            print(
+                "[BATTERY SAVER] "
+                f"enabled={battery_saver_enabled} "
+                f"brightness={result['brightness']}% "
+                f"timeout={result['screen_timeout']}s"
+            )
+        except (OSError, TypeError, ValueError) as error:
+            battery_saver_enabled = (
+                settings_service.get_battery_saver_enabled()
+            )
+            print(f"[BATTERY SAVER ERROR] {error}")
+
+        draw_battery_saver_switch()
+        refresh_display_setting_labels()
+
     def finish_restart_press(event):
         if abs(event.y_root - drag_start_y) <= 4:
             open_power_confirmation("restart")
@@ -2155,6 +2329,14 @@ def render_settings(root, _state):
             finish_battery_press,
         )
 
+    if battery_saver_switch is not None:
+        for widget in (*battery_saver_row_widgets, battery_saver_switch):
+            widget.config(cursor="hand2")
+            widget.bind(
+                "<ButtonRelease-1>",
+                finish_battery_saver_press,
+            )
+
     for widget in restart_row_widgets:
         widget.config(cursor="hand2")
         widget.bind(
@@ -2170,6 +2352,8 @@ def render_settings(root, _state):
         )
 
     def on_show():
+        nonlocal battery_saver_enabled
+
         wifi_panel.hide()
         wifi_panel.refresh(False)
         power_panel.place_forget()
@@ -2186,17 +2370,9 @@ def render_settings(root, _state):
                 text=f"{settings_service.get_maximum_volume()}%"
             )
 
-        if (brightness_value_label is not None and brightness_value_label.winfo_exists()):
-            brightness_value_label.config(
-                text=f"{settings_service.get_brightness()}%"
-            )
-
-        if timeout_value_label is not None and timeout_value_label.winfo_exists():
-            timeout_value_label.config(
-                text=_format_screen_timeout(
-                    settings_service.get_screen_timeout()
-                )
-            )
+        battery_saver_enabled = settings_service.get_battery_saver_enabled()
+        draw_battery_saver_switch()
+        refresh_display_setting_labels()
 
         load_bluetooth_devices(show_panel=False)
         load_output_devices()
