@@ -3,6 +3,7 @@ from tkinter import BOTH, LEFT, NORMAL, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_launcher
+from app.ui.screens.wifi_screen import WifiPanel
 from app.services import (
     audio_output_service,
     battery_service,
@@ -105,6 +106,8 @@ def render_settings(root, _state):
 
     bluetooth_value_label = None
     bluetooth_row_widgets = ()
+    wifi_row_widgets = ()
+    wifi_value_label = None
 
     pending_power_action = None
 
@@ -297,7 +300,10 @@ def render_settings(root, _state):
                 value,
                 index == len(rows) - 1,
             )
-            if title == "Bluetooth":
+            if title == "Wi-Fi":
+                wifi_row_widgets = row_widgets
+                wifi_value_label = value_label
+            elif title == "Bluetooth":
                 bluetooth_row_widgets = row_widgets
                 bluetooth_value_label = value_label
             elif title == "Audio output":
@@ -326,6 +332,7 @@ def render_settings(root, _state):
             elif title == "Shutdown":
                 shutdown_row_widgets = row_widgets
 
+    wifi_panel = WifiPanel(frame, _state, wifi_value_label)
     power_panel = Frame(frame, bg=BG)
 
     power_dialog = Frame(
@@ -2053,6 +2060,10 @@ def render_settings(root, _state):
         if abs(event.y_root - drag_start_y) <= 4:
             load_bluetooth_devices()
 
+    def finish_wifi_press(event):
+        if abs(event.y_root - drag_start_y) <= 4:
+            wifi_panel.show()
+
     def finish_output_press(event):
         if abs(event.y_root - drag_start_y) <= 4:
             load_output_devices(True)
@@ -2096,6 +2107,10 @@ def render_settings(root, _state):
     canvas.bind("<ButtonPress-1>", start_drag)
     canvas.bind("<B1-Motion>", drag)
     canvas.bind("<MouseWheel>", mousewheel)
+
+    for widget in wifi_row_widgets:
+        widget.config(cursor="hand2")
+        widget.bind("<ButtonRelease-1>", finish_wifi_press)
 
     for widget in bluetooth_row_widgets:
         widget.config(cursor="hand2")
@@ -2155,6 +2170,8 @@ def render_settings(root, _state):
         )
 
     def on_show():
+        wifi_panel.hide()
+        wifi_panel.refresh(False)
         power_panel.place_forget()
         bluetooth_panel.place_forget()
         close_output_panel()

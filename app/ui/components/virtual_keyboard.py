@@ -17,6 +17,7 @@ class VirtualKeyboard:
         self.target = None
         self.on_submit = None
         self.on_close = None
+        self.strip_on_submit = True
         self.shifted = False
         self.layout = "letters"
         self.letter_buttons = []
@@ -123,7 +124,7 @@ class VirtualKeyboard:
         space = self._button(row, "SPACE", lambda: self._insert_text(" "), font_size=11)
         space.grid(row=0, column=2, sticky="nsew", padx=2)
 
-        submit = self._button(
+        self.submit_button = self._button(
             row,
             "SEARCH",
             self._submit,
@@ -131,7 +132,7 @@ class VirtualKeyboard:
             active_bg="#169C46",
             font_size=11,
         )
-        submit.grid(row=0, column=3, sticky="nsew", padx=2)
+        self.submit_button.grid(row=0, column=3, sticky="nsew", padx=2)
 
         row.grid_columnconfigure(0, weight=2)
         row.grid_columnconfigure(1, weight=2)
@@ -139,13 +140,30 @@ class VirtualKeyboard:
         row.grid_columnconfigure(3, weight=3)
         row.grid_rowconfigure(0, weight=1)
 
-    def show(self, target, on_submit=None, on_close=None):
+    def show(
+        self,
+        target,
+        on_submit=None,
+        on_close=None,
+        submit_text="SEARCH",
+        strip_on_submit=True,
+    ):
         self.target = target
         self.on_submit = on_submit
         self.on_close = on_close
+        self.strip_on_submit = strip_on_submit
+        self.submit_button.config(text=submit_text)
+
         self.layout = "letters"
         self._set_shift(False)
-        self.frame.place(relx=0, rely=1, anchor="sw", relwidth=1, height=250)
+
+        self.frame.place(
+            relx=0,
+            rely=1,
+            anchor="sw",
+            relwidth=1,
+            height=250,
+        )
         self.frame.lift()
         target.focus_set()
 
@@ -223,8 +241,13 @@ class VirtualKeyboard:
             button.config(text=value.upper() if letters and self.shifted else value)
 
     def _submit(self):
-        query = self.target.get().strip() if self.target is not None else ""
+        value = self.target.get() if self.target is not None else ""
+
+        if self.strip_on_submit:
+            value = value.strip()
+
         callback = self.on_submit
         self.hide()
+
         if callback is not None:
-            callback(query)
+            callback(value)
