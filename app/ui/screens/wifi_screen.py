@@ -6,6 +6,17 @@ from app.ui.theme import ACCENT, BG, CARD, DANGER, DIVIDER, FONT, PAGE_PAD
 from app.ui.theme import SURFACE_ALT, TEXT, TEXT_MUTED
 
 
+def _valid_wifi_password(password):
+    # WPA/WPA2/WPA3 Personal accepts an 8-63 character passphrase or
+    # an exactly 64-character hexadecimal pre-shared key.
+    if 8 <= len(password) <= 63:
+        return True
+    return (
+        len(password) == 64
+        and all(character in "0123456789abcdefABCDEF" for character in password)
+    )
+
+
 class WifiPanel:
     def __init__(self, parent, state, summary_label):
         self.state = state
@@ -33,6 +44,16 @@ class WifiPanel:
               font=(FONT, 9, "bold"), anchor="w").pack(fill=X, padx=PAGE_PAD, pady=(6, 10))
         self.message = Label(self.frame, text="", bg=BG, fg=TEXT_MUTED,
                              font=(FONT, 10), anchor="w", justify=LEFT, wraplength=440)
+        self.spotify_status = Label(
+            self.frame,
+            text="",
+            bg=BG,
+            fg=TEXT_MUTED,
+            font=(FONT, 10),
+            anchor="w",
+            justify=LEFT,
+            wraplength=440,
+        )
         self.canvas = Canvas(self.frame, bg=BG, highlightthickness=0)
         self.canvas.pack(fill=BOTH, expand=True, padx=PAGE_PAD, pady=(0, 14))
         self.body = Frame(self.canvas, bg=BG)
@@ -43,6 +64,7 @@ class WifiPanel:
         self.selected_network = None
         self.connecting = False
         self._create_connection_panel()
+        self.validation_popup_job = None
         self.job = self.frame.after(100, self._pump)
         self.frame.bind("<Destroy>", self._destroy, add="+")
 
@@ -90,14 +112,17 @@ class WifiPanel:
             fill=X, padx=PAGE_PAD, pady=(10, 20)
         )
 
-        Label(
+        self.use_saved_profile = False
+
+        self.password_label = Label(
             self.connection_panel,
             text="Password",
             bg=BG,
             fg=TEXT_MUTED,
             font=(FONT, 11),
             anchor="w",
-        ).pack(fill=X, padx=PAGE_PAD)
+        )
+        self.password_label.pack(fill=X, padx=PAGE_PAD)
 
         self.password_entry = Entry(
             self.connection_panel,
@@ -123,6 +148,12 @@ class WifiPanel:
         )
         self.connect_button.pack(anchor="e", padx=PAGE_PAD)
 
+        self.change_password_button = self._button(
+            self.connection_panel,
+            "Change password",
+            self._change_password,
+        )
+
         self.connection_message = Label(
             self.connection_panel,
             text="",
@@ -139,30 +170,120 @@ class WifiPanel:
 
         self.keyboard = VirtualKeyboard(self.connection_panel)
 
+        self.validation_popup = Label(
+            self.connection_panel,
+            text="",
+            bg=CARD,
+            fg=DANGER,
+            font=(FONT, 11, "bold"),
+            justify="center",
+            wraplength=360,
+            padx=18,
+            pady=12,
+            relief="solid",
+            borderwidth=1,
+        )
+
+
+    def _hide_validation_popup(self):
+        self.validation_popup_job = None
+        self.validation_popup.place_forget()
+
+
+    def _show_validation_popup(self, text):
+        if self.validation_popup_job is not None:
+            self.frame.after_cancel(self.validation_popup_job)
+
+        self.validation_popup.config(text=text)
+        self.validation_popup.place(
+            relx=0.5,
+            rely=0.12,
+            anchor="n",
+        )
+        self.validation_popup.lift()
+        self.validation_popup_job = self.frame.after(
+            2500,
+            self._hide_validation_popup,
+        )
+
 
     def _open_connection_panel(self, network):
         if self.controller.busy:
             return
 
         self.selected_network = dict(network)
+        is_open = network["security"] == "Open"
+        self.use_saved_profile = (
+            bool(network.get("saved")) and not is_open
+        )
+
+        self.keyboard.hide()
+        if self.validation_popup_job is not None:
+            self.frame.after_cancel(self.validation_popup_job)
+            self.validation_popup_job = None
+        self.validation_popup.place_forget()
         self.network_name.config(text=network["ssid"])
         self.connection_message.config(text="", fg=TEXT_MUTED)
+
         self.password_entry.config(state="normal")
         self.password_entry.delete(0, "end")
+        self.password_label.pack_forget()
+        self.password_entry.pack_forget()
+        self.change_password_button.pack_forget()
+
+        self._set_connecting(False)
 
         self.connection_panel.place(
             x=0, y=0, relwidth=1, relheight=1
         )
         self.connection_panel.lift()
 
-        if network["security"] == "Open":
-            self.password_entry.config(state="disabled")
+        if is_open:
             self.connection_message.config(
                 text="This network does not require a password."
             )
-            self.keyboard.hide()
+        elif self.use_saved_profile:
+            self.connection_message.config(
+                text="CONNECT will use the saved network profile."
+            )
+            self.change_password_button.pack(
+                anchor="e",
+                padx=PAGE_PAD,
+                pady=(10, 0),
+                before=self.connection_message,
+            )
         else:
+            self._show_password_fields()
             self._show_password_keyboard()
+
+    def _show_password_fields(self):
+        self.password_label.pack(
+            fill=X,
+            padx=PAGE_PAD,
+            before=self.connect_button,
+        )
+        self.password_entry.pack(
+            fill=X,
+            padx=PAGE_PAD,
+            pady=(8, 16),
+            ipady=10,
+            before=self.connect_button,
+        )
+
+    def _change_password(self):
+        if self.connecting or self.selected_network is None:
+            return
+
+        self.use_saved_profile = False
+        self.change_password_button.pack_forget()
+        self.password_entry.config(state="normal")
+        self.password_entry.delete(0, "end")
+        self.connection_message.config(
+            text="Enter the new network password.",
+            fg=TEXT_MUTED,
+        )
+        self._show_password_fields()
+        self._show_password_keyboard()
 
 
     def _show_password_keyboard(self):
@@ -182,6 +303,10 @@ class WifiPanel:
             return
         
         self.keyboard.hide()
+        if self.validation_popup_job is not None:
+            self.frame.after_cancel(self.validation_popup_job)
+            self.validation_popup_job = None
+        self.validation_popup.place_forget()
         self.password_entry.config(state="normal")
         self.password_entry.delete(0, "end")
         self.selected_network = None
@@ -204,12 +329,29 @@ class WifiPanel:
             return
 
         network = dict(self.selected_network)
-        password = self.password_entry.get()
 
-        if network["security"] != "Open" and not password:
-            self.connection_message.config(
-                text="Enter the network password.",
-                fg=DANGER,
+        password = (
+            "" if self.use_saved_profile
+            else self.password_entry.get()
+        )
+
+        if (
+            network["security"] != "Open"
+            and not self.use_saved_profile
+            and not password
+        ):
+            self._show_validation_popup(
+                "Enter the network password."
+            )
+            return
+
+        if (
+            network["security"] != "Open"
+            and not self.use_saved_profile
+            and not _valid_wifi_password(password)
+        ):
+            self._show_validation_popup(
+                "Password must contain at least 8 characters."
             )
             return
 
@@ -236,6 +378,7 @@ class WifiPanel:
         button_state = "disabled" if active else "normal"
 
         self.connect_button.config(state=button_state)
+        self.change_password_button.config(state=button_state)
         self.connection_back_button.config(state=button_state)
         self.refresh_button.config(state=button_state)
 
@@ -243,8 +386,13 @@ class WifiPanel:
             self.selected_network is not None
             and self.selected_network["security"] == "Open"
         )
+
         self.password_entry.config(
-            state="disabled" if active or is_open else "normal"
+            state=(
+                "disabled"
+                if active or is_open or self.use_saved_profile
+                else "normal"
+            )
         )
 
 
@@ -287,8 +435,41 @@ class WifiPanel:
             self.message.pack_forget()
 
     def _pump(self):
-        # Deliver completed reads to Tk; do not start periodic network queries.
         self.controller.poll(self._render)
+
+        reconnecting = self.state.get(
+            "spotify_reconnecting", False
+        )
+        error = self.state.get("spotify_reconnect_error")
+
+        if reconnecting and not self.connecting:
+            text = (
+                "Reconnecting Spotify… "
+            )
+            color = TEXT_MUTED
+        elif not reconnecting and error:
+            text = (
+                f"Spotify: {error}\n"
+                "You can retry CONNECT or choose another Wi-Fi network."
+            )
+            color = DANGER
+        else:
+            text = ""
+            color = TEXT_MUTED
+
+        if self.spotify_status.cget("text") != text:
+            self.spotify_status.config(text=text, fg=color)
+
+            if text:
+                self.spotify_status.pack(
+                    fill=X,
+                    padx=PAGE_PAD,
+                    pady=(0, 10),
+                    before=self.canvas,
+                )
+            else:
+                self.spotify_status.pack_forget()
+
         self.job = self.frame.after(100, self._pump)
 
     def _render(self, snapshot, error):
@@ -379,6 +560,10 @@ class WifiPanel:
             self._open_connection_panel(network)
 
     def _destroy(self, event):
-        if event.widget is self.frame and self.job is not None:
-            self.frame.after_cancel(self.job)
-            self.job = None
+        if event.widget is self.frame:
+            if self.validation_popup_job is not None:
+                self.frame.after_cancel(self.validation_popup_job)
+                self.validation_popup_job = None
+            if self.job is not None:
+                self.frame.after_cancel(self.job)
+                self.job = None

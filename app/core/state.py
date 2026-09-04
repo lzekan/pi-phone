@@ -12,6 +12,7 @@ _state = {
         "image_url": None
     },
     "next_song": None,
+    "spotify_reconnecting": False,
     "queue": [],
     "spotify_manual_queue": [],
     "screen": "launcher",

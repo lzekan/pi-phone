@@ -5,6 +5,8 @@ import threading
 import time
 import subprocess
 
+from concurrent.futures import CancelledError
+
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 TOKEN_FILE = "/home/lukaz/pi-phone/tokens/tokens.json"
@@ -17,6 +19,75 @@ DEVICE_DISCOVERY_DELAY = 1
 _access_token = None
 _token_expires_at = 0
 _token_lock = threading.Lock()
+
+# Serialize receiver lifecycle changes, never HTTP requests. Local playback
+# must not wait for the network, and recovery must not undo an explicit stop.
+_receiver_lock = threading.RLock()
+_receiver_local_mode = False
+_receiver_generation = 0
+
+
+def receiver_generation():
+    with _receiver_lock:
+        return _receiver_generation
+
+
+def stop_receiver_for_local():
+    global _receiver_local_mode, _receiver_generation
+
+    with _receiver_lock:
+        _receiver_local_mode = True
+        _receiver_generation += 1
+        try:
+            subprocess.run(
+                ["systemctl", "--user", "stop", "piphone-spotify.service"],
+                capture_output=True, text=True, timeout=10, check=True,
+            )
+            status = subprocess.run(
+                ["systemctl", "--user", "show", "piphone-spotify.service",
+                 "--property=ActiveState", "--value"],
+                capture_output=True, text=True, timeout=3, check=True,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError(
+                "Could not stop the Spotify receiver for local playback."
+            ) from error
+        if status.stdout.strip() not in ("inactive", "failed"):
+            raise RuntimeError("Spotify receiver has not stopped yet.")
+
+
+def start_receiver_for_spotify():
+    global _receiver_local_mode, _receiver_generation
+
+    with _receiver_lock:
+        try:
+            # ExecStartPre may wait for internet/time; do not block here.
+            subprocess.run(
+                ["systemctl", "--user", "--no-block", "start",
+                 "piphone-spotify.service"],
+                capture_output=True, text=True, timeout=5, check=True,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError("Could not start the Spotify receiver.") from error
+        if _receiver_local_mode:
+            _receiver_generation += 1
+        _receiver_local_mode = False
+
+
+def _check_receiver_generation(expected):
+    with _receiver_lock:
+        if _receiver_local_mode or expected != _receiver_generation:
+            raise CancelledError("Spotify receiver ownership changed.")
+
+
+def _restart_receiver(expected):
+    with _receiver_lock:
+        _check_receiver_generation(expected)
+        subprocess.run(
+            ["systemctl", "--user", "--no-block", "restart",
+             "piphone-spotify.service"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
 
 id_me = None
 
@@ -54,18 +125,150 @@ def _get_token():
 
 # ----------------------------------------------------
 
+def recover_spotify_connection(expect_active=False, cancel_event=None):
+    generation = receiver_generation()
+    if cancel_event is None:
+        cancel_event = threading.Event()
+
+    def check_cancelled():
+        _check_receiver_generation(generation)
+        if cancel_event.is_set():
+            raise CancelledError("Spotify recovery cancelled.")    
+
+    deadline = time.monotonic() + 45
+    restart_after = time.monotonic() + 8
+    restarted = False
+
+    def read_api(path):
+        check_cancelled()
+        token = _get_token()
+        check_cancelled()
+
+        response = requests.get(
+            f"https://api.spotify.com/v1/me/player{path}",
+            headers={
+                "Authorization": f"Bearer {token}"
+            },
+            timeout=(3, 5),
+        )
+
+        check_cancelled()
+
+        if response.status_code == 429:
+            retry_after = response.headers.get("Retry-After", "30")
+            raise RuntimeError(
+                f"Spotify is limiting requests. Retry after {retry_after}s."
+            )
+
+        if response.status_code in (401, 403):
+            raise RuntimeError(
+                "Spotify authorization failed. Check account access."
+            )
+
+        response.raise_for_status()
+
+        if response.status_code == 204:
+            return None
+
+        return response.json()
+
+    while time.monotonic() < deadline:
+        check_cancelled()
+        api_reachable = False
+
+        try:
+            devices_data = read_api("/devices") or {}
+            api_reachable = True
+
+            device = next(
+                (
+                    item
+                    for item in devices_data.get("devices", [])
+                    if item.get("name") == SPOTIFY_DEVICE_NAME
+                    and item.get("id")
+                    and not item.get("is_restricted", False)
+                ),
+                None,
+            )
+
+            if device is not None:
+                playback = read_api("")
+                playback_device = (playback or {}).get("device") or {}
+
+                active_here = (
+                    playback_device.get("id") == device["id"]
+                )
+
+                # Prije restarta očekujemo aktivnu sesiju ako je
+                # PiPhone reproducirao glazbu prije promjene mreže.
+                # Nakon restarta uređaj može biti dostupan, ali mirovan.
+                if active_here or not expect_active or restarted:
+                    return {
+                        "device_id": device["id"],
+                        "playback": playback if active_here else None,
+                        "account_playback": playback,
+                        "active_here": active_here,
+                        "restarted": restarted,
+                    }
+
+        except (requests.ConnectionError, requests.Timeout):
+            # Kratkotrajni prekid mreže: pokušaj ponovno u istom roku.
+            pass
+
+        except requests.HTTPError as error:
+            status = (
+                error.response.status_code
+                if error.response is not None
+                else None
+            )
+
+            if status is None or status < 500:
+                raise RuntimeError(
+                    f"Spotify recovery failed: HTTP {status}."
+                ) from None
+
+        if (
+            not restarted
+            and api_reachable
+            and time.monotonic() >= restart_after
+            and time.monotonic() < deadline
+        ):
+            try:
+                check_cancelled()
+                _restart_receiver(generation)
+            except (OSError, subprocess.SubprocessError):
+                raise RuntimeError(
+                    "Could not restart the Spotify receiver."
+                ) from None
+
+            restarted = True
+
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            cancel_event.wait(min(2, remaining))
+
+        check_cancelled()
+
+    raise RuntimeError(
+        "Spotify did not become available. Try reconnecting again."
+    )
+
 def get_device_id():
+    generation = receiver_generation()
+    _check_receiver_generation(generation)
     token = _get_token()
     headers = {"Authorization": f"Bearer {token}"}
 
     for recovery_attempt in range(2):
         for attempt in range(DEVICE_DISCOVERY_ATTEMPTS):
+            _check_receiver_generation(generation)
             response = requests.get(
                 "https://api.spotify.com/v1/me/player/devices",
                 headers=headers,
                 timeout=REQUEST_TIMEOUT
             )
             response.raise_for_status()
+            _check_receiver_generation(generation)
 
             devices = response.json().get("devices", [])
 
@@ -78,16 +281,7 @@ def get_device_id():
         if recovery_attempt == 0:
             print("[WARN] PiPhone unavailable, restarting librespot")
 
-            subprocess.run(
-                [
-                    "systemctl",
-                    "--user",
-                    "restart",
-                    "piphone-spotify.service"
-                ],
-                timeout=10,
-                check=True
-            )    
+            _restart_receiver(generation)
 
     return None
 # ----------------- SONG ACTIONS ---------------------
@@ -154,6 +348,8 @@ def seek(position_ms):
 def play_track(uri, context_uri=None):
     token = _get_token()
     device_id = get_device_id()
+    if not device_id:
+        raise RuntimeError("PiPhone Spotify receiver is not available yet.")
 
     headers = {
         "Authorization": f"Bearer {token}"
@@ -173,6 +369,47 @@ def play_track(uri, context_uri=None):
         params={"device_id": device_id},
         json=playback,
         timeout=REQUEST_TIMEOUT
+    )
+    response.raise_for_status()
+
+def restore_spotify_playback(device_id, snapshot):
+    uri = (snapshot or {}).get("uri")
+
+    if not device_id or not uri:
+        raise RuntimeError(
+            "Missing Spotify device or playback snapshot."
+        )
+
+    position_ms = max(
+        0,
+        int(snapshot.get("progress_ms", 0) or 0),
+    )
+    duration_ms = max(
+        1,
+        int(snapshot.get("duration_ms", 1) or 1),
+    )
+
+    # Ne pokušavaj nastaviti iza samoga kraja pjesme.
+    position_ms = min(
+        position_ms,
+        max(0, duration_ms - 1000),
+    )
+
+    token = _get_token()
+
+    response = requests.put(
+        "https://api.spotify.com/v1/me/player/play",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+        params={
+            "device_id": device_id,
+        },
+        json={
+            "uris": [uri],
+            "position_ms": position_ms,
+        },
+        timeout=REQUEST_TIMEOUT,
     )
     response.raise_for_status()
 

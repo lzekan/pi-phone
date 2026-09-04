@@ -11,14 +11,22 @@ from app.features.spotify.controllers import queue as queue_controller
 _command_queue = Queue()
 _command_generation = 0
 _library_lock = Lock()
+_retry_selection = None
 
 
 def _command_worker():
     while True:
         command, on_error = _command_queue.get()
         try:
+            if get_state().get("spotify_reconnecting", False):
+                raise RuntimeError(
+                    "Spotify is reconnecting; playback command skipped."
+                )
+
             command()
-            daemon_client.request_immediate_poll()
+            daemon_client.request_immediate_poll(
+                confirm=daemon_client.pending_track_change
+            )
         except Exception as error:
             print(f"[SPOTIFY ERROR] {error}")
             if on_error:
@@ -101,7 +109,21 @@ def toggle_current_track_saved():
                 state["track_library_loading"] = False
 
 def on_toggle_play():
+    if get_state().get("spotify_reconnecting", False):
+        return
+
+    if get_state().get("spotify_navigation_unconfirmed"):
+        # Playback state is unknown. Ask for an observation rather than
+        # toggling from the deliberately frozen fallback's is_playing=False.
+        daemon_client.request_immediate_poll(confirm=True)
+        return
+    
     song_state = get_song_state()
+    if get_state().get("spotify_playback_error") and _retry_selection:
+        uri, context_uri, track_data = _retry_selection
+        if song_state.get("track_id") == uri.split(":")[-1]:
+            play_selected_track(uri, context_uri, track_data)
+            return
     desired_state = not song_state["is_playing"]
     generation = _next_command_generation()
 
@@ -118,6 +140,11 @@ def on_toggle_play():
 
 
 def on_next():
+    global _retry_selection
+    if get_state().get("spotify_reconnecting", False):
+        return
+    _retry_selection = None
+
     song_state = get_song_state()
     manual_queue = get_state().get("spotify_manual_queue", [])
     manual_next = manual_queue[0] if manual_queue else None
@@ -127,7 +154,7 @@ def on_next():
         queue_controller.commit_next_manual_queue_item()
 
     generation = _next_command_generation()
-    daemon_client.expect_track_change()
+    daemon_client.expect_track_change(restore_on_failure=True)
 
     if next_song:
         song_state.update({
@@ -150,10 +177,11 @@ def on_next():
     song_state["is_playing"] = True
 
     def rollback():
-        if generation == _command_generation:
-            daemon_client.pending_track_change = False
-            daemon_client.pending_seek_position = None
-            daemon_client.pending_play_state = None
+        if (generation == _command_generation
+                and daemon_client.pending_track_change
+                and get_song_state().get("source") == "spotify"):
+            daemon_client.mark_track_change_unconfirmed()
+            daemon_client.request_immediate_poll(confirm=True)
 
     def advance():
         if manual_next:
@@ -165,25 +193,31 @@ def on_next():
 
 
 def on_prev():
+    global _retry_selection
+    if get_state().get("spotify_reconnecting", False):
+        return
+    _retry_selection = None
     song_state = get_song_state()
     generation = _next_command_generation()
+    daemon_client.expect_track_change(restore_on_failure=True)
     song_state["progress_ms"] = 0
-
-    daemon_client.expect_track_change()
     daemon_client.pending_play_state = True
     daemon_client.play_start_time = time.time()
     song_state["is_playing"] = True
 
     def rollback():
-        if generation == _command_generation:
-            daemon_client.pending_track_change = False
-            daemon_client.pending_seek_position = None
-            daemon_client.pending_play_state = None
+        if (generation == _command_generation
+                and daemon_client.pending_track_change
+                and get_song_state().get("source") == "spotify"):
+            daemon_client.mark_track_change_unconfirmed()
+            daemon_client.request_immediate_poll(confirm=True)
 
     _run_async(spotify_service.prev_track, rollback)
 
 
 def on_seek(position_ms):
+    if get_state().get("spotify_reconnecting", False):
+        return
     song_state = get_song_state()
     generation = _next_command_generation()
     daemon_client.pending_seek_position = position_ms
@@ -198,6 +232,10 @@ def on_seek(position_ms):
 
 
 def play_selected_track(uri, context_uri=None, track_data=None):
+    global _retry_selection
+    if get_state().get("spotify_reconnecting", False):
+        return
+    _retry_selection = (uri, context_uri, dict(track_data) if track_data else None)
     song_state = get_song_state()
     song_state["source"] = "spotify"
     generation = _next_command_generation()
@@ -233,10 +271,12 @@ def play_selected_track(uri, context_uri=None, track_data=None):
     go_player()
     
     def rollback():
-        if generation == _command_generation:
-            daemon_client.pending_track_change = False
-            daemon_client.pending_seek_position = None
-            daemon_client.pending_play_state = None
-            daemon_client.expected_track_after_change = None
+        if (generation == _command_generation
+                and daemon_client.pending_track_change
+                and song_state.get("source") == "spotify"
+                and song_state.get("track_id") == uri.split(":")[-1]):
+            daemon_client.mark_track_change_unconfirmed()
+            # A timed-out HTTP request may still have started playback.
+            daemon_client.request_immediate_poll(confirm=True)
 
     _run_async(lambda: playback_coordinator.play_spotify(uri, context_uri), rollback)

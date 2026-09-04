@@ -1,5 +1,4 @@
-# Program koji svako 1 sekundu salje zahtjev na Web API i dohvaca relevantne podatke o 
-# pjesmi koja se trenutno pusta (title, artist, album, cover)
+# Dohvat stanja reprodukcije, uz kratku ubrzanu provjeru nakon korisničke naredbe.
 
 import requests
 import time
@@ -22,6 +21,12 @@ QUEUE_REFRESH_SECONDS = 5
 PLAYING_POLL_SECONDS = 3
 PAUSED_POLL_SECONDS = 5
 INACTIVE_POLL_SECONDS = 15
+CONFIRMATION_SECONDS = 12
+CONFIRMATION_POLL_SECONDS = 1
+confirmation_deadline = 0
+confirmation_track_id = None
+rate_limit_until = 0
+poll_started_at_ns = 0
 
 ERROR_INITIAL_POLL_SECONDS = 5
 ERROR_MAX_POLL_SECONDS = 30
@@ -87,6 +92,16 @@ def save_recent_tracks(tracks):
     os.replace(temp_file, RECENT_TRACKS_FILE)
 
 
+def save_song_state(state):
+    # Readers must never see a partially written JSON document. The observation
+    # timestamp also lets the UI reject a response requested before its command.
+    payload = dict(state, observed_at_ns=poll_started_at_ns)
+    temp_file = f"{SONG_STATE_FILE}.tmp"
+    with open(temp_file, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=4, ensure_ascii=False)
+    os.replace(temp_file, SONG_STATE_FILE)
+
+
 def save_inactive_state():
     state = {
         "track_id": None,
@@ -102,8 +117,7 @@ def save_inactive_state():
         "queue": []
     }
 
-    with open(SONG_STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=4, ensure_ascii=False)
+    save_song_state(state)
 
 def load_refresh_token():
     with open(TOKEN_FILE, "r") as f:
@@ -154,6 +168,38 @@ def create_poll_socket():
     poll_socket.setblocking(False)
     return poll_socket
 
+def handle_poll_message(message):
+    global confirmation_deadline, confirmation_track_id
+    if message.startswith(b"confirm:"):
+        confirmation_track_id = message[8:].decode("ascii", errors="ignore") or None
+        confirmation_deadline = time.monotonic() + CONFIRMATION_SECONDS
+        print(f"[CONFIRM] Requested track={confirmation_track_id or 'next'}")
+
+
+def confirmation_delay(default):
+    if time.monotonic() < confirmation_deadline:
+        return min(default, CONFIRMATION_POLL_SECONDS)
+    return default
+
+
+def confirm_observation(track_id, is_playing):
+    global confirmation_deadline
+    if (time.monotonic() < confirmation_deadline and is_playing
+            and (confirmation_track_id is None or track_id == confirmation_track_id)):
+        confirmation_deadline = 0
+        print(f"[CONFIRM] Observed track={track_id}")
+
+
+def defer_rate_limit(response):
+    global rate_limit_until
+    try:
+        retry_after = max(1, float(response.headers.get("Retry-After", "30")))
+    except (TypeError, ValueError):
+        retry_after = 30
+    rate_limit_until = max(rate_limit_until, time.monotonic() + retry_after)
+    print(f"[WARN] Rate limited, retrying in {retry_after}s")
+
+
 def wait_for_next_poll(poll_socket, timeout):
     readable, _, _ = select.select(
         [poll_socket],
@@ -167,7 +213,7 @@ def wait_for_next_poll(poll_socket, timeout):
 
     while True:
         try:
-            poll_socket.recv(64)
+            handle_poll_message(poll_socket.recv(128))
         except BlockingIOError:
             break
 
@@ -197,6 +243,9 @@ poll_seconds = PLAYING_POLL_SECONDS
 error_poll_seconds = ERROR_INITIAL_POLL_SECONDS
 
 while True:
+    # Socket wakeups must not bypass Retry-After (including queue requests).
+    if time.monotonic() < rate_limit_until:
+        time.sleep(max(0, rate_limit_until - time.monotonic()))
     remaining = int(token_expiry_time - time.time())
     print(f"[DEBUG] Token expires in: {remaining}s")
 
@@ -220,6 +269,7 @@ while True:
             continue
 
     try:
+        poll_started_at_ns = time.time_ns()
         r = requests.get(
             "https://api.spotify.com/v1/me/player/currently-playing",
             headers=headers,
@@ -271,24 +321,6 @@ while True:
                 save_recent_tracks(recent_history)
 
             remaining_ms = data["item"]["duration_ms"] - data["progress_ms"]
-            now = time.time()
-            near_end = remaining_ms <= PRELOAD_BEFORE_END_MS
-            queue_refresh_due = now - last_queue_fetch >= QUEUE_REFRESH_SECONDS
-            if new_track or (near_end and queue_refresh_due):
-                last_queue_fetch = now
-                try:
-                    queue_response = requests.get(
-                        "https://api.spotify.com/v1/me/player/queue",
-                        headers=headers,
-                        timeout=REQUEST_TIMEOUT
-                    )
-                    if queue_response.status_code == 200:
-                        queue_items = queue_response.json().get("queue", [])
-                        queue_tracks = [track_payload(item) for item in queue_items]
-                        next_song = queue_tracks[0] if queue_tracks else None
-                except requests.RequestException as error:
-                    print(f"[WARN] Queue preload failed: {error}. Keeping current state")
-
             state = {
                 "track_id": track_id,
                 "track": data["item"]["name"],
@@ -300,13 +332,38 @@ while True:
                 "is_playing": data["is_playing"],
                 "image_url": image_url,
                 "next_song": next_song,
-                "queue": queue_tracks
+                "queue": queue_tracks,
             }
+            # Publish playback before the optional queue HTTP request, which
+            # can take much longer than the playback-state request itself.
+            save_song_state(state)
+            confirm_observation(track_id, data["is_playing"])
+            now = time.time()
+            near_end = remaining_ms <= PRELOAD_BEFORE_END_MS
+            queue_refresh_due = now - last_queue_fetch >= QUEUE_REFRESH_SECONDS
+            if (new_track or (near_end and queue_refresh_due)) and (
+                time.monotonic() >= confirmation_deadline
+            ):
+                last_queue_fetch = now
+                try:
+                    queue_response = requests.get(
+                        "https://api.spotify.com/v1/me/player/queue",
+                        headers=headers,
+                        timeout=REQUEST_TIMEOUT
+                    )
+                    if queue_response.status_code == 200:
+                        queue_items = queue_response.json().get("queue", [])
+                        queue_tracks = [track_payload(item) for item in queue_items]
+                        next_song = queue_tracks[0] if queue_tracks else None
+                    elif queue_response.status_code == 429:
+                        defer_rate_limit(queue_response)
+                except requests.RequestException as error:
+                    print(f"[WARN] Queue preload failed: {error}. Keeping current state")
 
-            with open(SONG_STATE_FILE, "w", encoding="utf-8") as f:
-                json.dump(state, f, indent=4, ensure_ascii=False)
-
-            print(state)
+            state.update(next_song=next_song, queue=queue_tracks)
+            save_song_state(state)
+            print(f"[STATE] track={track_id} progress_ms={data['progress_ms']} "
+                  f"playing={data['is_playing']}")
 
         else:
             poll_seconds = INACTIVE_POLL_SECONDS
@@ -332,12 +389,10 @@ while True:
             print(f"[WARN] Forced token refresh failed: {error}. Retrying next cycle")
 
     elif r.status_code == 429:
-        retry_after = int(r.headers.get("Retry-After", 30))
-        print(f"[WARN] Rate limited, retrying in {retry_after}s")
-        time.sleep(retry_after)
+        defer_rate_limit(r)
         continue
 
     else:
         print("Error:", r.status_code)
 
-    wait_for_next_poll(poll_socket, poll_seconds)
+    wait_for_next_poll(poll_socket, confirmation_delay(poll_seconds))

@@ -10,8 +10,13 @@ def play_local(path):
     with _switch_lock:
         state = get_state()
 
-        if state.get("playback_owner") == "spotify":
-            spotify_service.set_playing(False)
+        # Stop the local receiver, not Spotify's remote Web API. Do this
+        # even if cached ownership is missing or stale after a network change.
+        try:
+            spotify_service.stop_receiver_for_local()
+        finally:
+            state["spotify_reconnecting"] = False
+        state["playback_owner"] = None
 
         process = playback_service.play_file(path)
         state["playback_owner"] = "local"
@@ -29,5 +34,6 @@ def play_spotify(uri, context_uri=None):
             playback_service.stop_playback()
             state["playback_owner"] = None
 
+        spotify_service.start_receiver_for_spotify()
         spotify_service.play_track(uri, context_uri)
         state["playback_owner"] = "spotify"

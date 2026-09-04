@@ -60,6 +60,18 @@ last_track_id = None
 last_is_playing = None
 
 
+def _playback_status(state):
+    if state["song"].get("source") == "local":
+        return "OFFLINE PLAYBACK"
+    if state.get("spotify_navigation_unconfirmed"):
+        return "TRACK CHANGE NOT CONFIRMED"
+    if state.get("spotify_playback_error"):
+        return "NOT CONFIRMED - PRESS PLAY"
+    if state.get("spotify_playback_pending"):
+        return "WAITING FOR SPOTIFY"
+    return "NOW PLAYING"
+
+
 def _get_track_id(song):
     track_id = song.get("track_id")
     if track_id:
@@ -69,7 +81,7 @@ def _get_track_id(song):
     return None
 
 
-def _get_progress_ms(song, now):
+def _get_progress_ms(song, now, waiting_for_spotify=False):
     global last_progress, last_update_time
     global last_source_progress, last_track_id, last_is_playing
 
@@ -78,7 +90,8 @@ def _get_progress_ms(song, now):
     duration = max(1, song.get("duration_ms", 1) or 1)
     is_playing = bool(song.get("is_playing", False))
 
-    if track_id != last_track_id or incoming != last_source_progress or is_playing != last_is_playing:
+    if (track_id != last_track_id or incoming != last_source_progress
+            or is_playing != last_is_playing or waiting_for_spotify):
         last_progress = incoming
         last_update_time = now
 
@@ -87,7 +100,7 @@ def _get_progress_ms(song, now):
     last_is_playing = is_playing
 
     progress_ms = last_progress
-    if is_playing:
+    if is_playing and not waiting_for_spotify:
         progress_ms += (now - last_update_time) * 1000
     return min(max(0, progress_ms), duration)
 
@@ -1128,9 +1141,7 @@ def render_player(root, state, button_style):
             player_cover_key = cover_key
             set_cover(cover_key, song)
 
-        source_label.config(
-            text="OFFLINE PLAYBACK" if source == "local" else "NOW PLAYING"
-        )
+        source_label.config(text=_playback_status(current_state))
         cover_cursor = "" if source == "local" else "hand2"
         cover_frame.config(cursor=cover_cursor)
         cover_label.config(cursor=cover_cursor)
@@ -1145,7 +1156,11 @@ def render_player(root, state, button_style):
 
         now = time.time()
         duration = max(1, song.get("duration_ms", 1) or 1)
-        progress_ms = _get_progress_ms(song, now)
+        waiting_for_spotify = (
+            source == "spotify"
+            and current_state.get("spotify_playback_pending", False)
+        )
+        progress_ms = _get_progress_ms(song, now, waiting_for_spotify)
         if not seeking:
             progress["value"] = (progress_ms / duration) * 100
             elapsed_label.config(text=_format_time(progress_ms))

@@ -59,7 +59,8 @@ def _load_collection_page(collection_type, reset):
                     else images[0]["url"] if images else None
                 ),
                 "uri": track.get("uri"),
-                "track_id": track.get("id")
+                "track_id": track.get("id"),
+                "duration_ms": track.get("duration_ms", 0),
             })
 
         if state.get("current_collection_uri") != collection_uri:

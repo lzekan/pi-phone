@@ -220,7 +220,20 @@ def create_mini_player(root, parent, button_style, before=None):
         nonlocal cover_key
 
         song = current_state["song"]
-        if song.get("track_id"):
+
+        reconnecting = (
+            song.get("source", "spotify") == "spotify"
+            and current_state.get("spotify_reconnecting", False)
+        )
+        unconfirmed = (
+            song.get("source", "spotify") == "spotify"
+            and bool(current_state.get("spotify_playback_error"))
+        )
+        navigation_unconfirmed = (
+            unconfirmed and current_state.get("spotify_navigation_unconfirmed", False)
+        )
+
+        if song.get("track_id") or reconnecting:
             if not frame.winfo_manager():
                 pack_options = {"fill": X, "side": BOTTOM}
                 if before is not None:
@@ -238,13 +251,31 @@ def create_mini_player(root, parent, button_style, before=None):
             cover_key = new_cover_key
             set_cover(new_cover_key, song)
 
-        track_text = song.get("track", "") or "Nothing playing"
-        artist_text = song.get("artist", "")
-        track.config(text=fit_text(track_text, track, track_font))
-        artist.config(text=fit_text(artist_text, artist, artist_font))
+        if reconnecting:
+            track_text = song.get("track") or "Spotify"
+            artist_text = "Reconnecting…"
+        elif unconfirmed:
+            track_text = song.get("track") or "Spotify"
+            artist_text = "Playback unconfirmed"
+        else:
+            track_text = song.get("track") or "Nothing playing"
+            artist_text = song.get("artist") or ""
+
+        track.config(
+            text=fit_text(track_text, track, track_font)
+        )
+        artist.config(
+            text=fit_text(artist_text, artist, artist_font),
+            fg=ACCENT if reconnecting or unconfirmed else TEXT_MUTED,
+        )
+
         play.config(
-            text="Ⅱ" if song.get("is_playing", False) else "▶",
-            state=NORMAL,
+            text=(
+                "…"
+                if reconnecting or navigation_unconfirmed
+                else "Ⅱ" if song.get("is_playing", False) else "▶"
+            ),
+            state="disabled" if reconnecting or navigation_unconfirmed else NORMAL,
         )
 
     return {
