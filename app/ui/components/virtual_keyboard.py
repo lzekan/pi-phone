@@ -6,6 +6,11 @@ class VirtualKeyboard:
     KEY_BG = "#2A2A2A"
     KEY_ACTIVE_BG = "#424242"
     ACCENT = "#1DB954"
+    LAYOUTS = {
+        "letters": "qwertyuiop" "asdfghjkl" "zxcvbnm",
+        "numbers": "1234567890" "@#$%&-+()" "*\"':;!?",
+        "symbols": "[]{}<>_=\\/" "~`^|€£¥•°" ".,:;!?+",
+    }
 
     def __init__(self, parent):
         self.parent = parent
@@ -13,6 +18,7 @@ class VirtualKeyboard:
         self.on_submit = None
         self.on_close = None
         self.shifted = False
+        self.layout = "letters"
         self.letter_buttons = []
 
         self.frame = Frame(
@@ -66,11 +72,13 @@ class VirtualKeyboard:
         row.pack(fill=BOTH, expand=True, padx=horizontal_padding, pady=2)
 
         for column, letter in enumerate(letters):
+            index = len(self.letter_buttons)
             button = self._button(
                 row,
                 letter,
-                lambda value=letter: self._insert_letter(value),
+                lambda key=index: self._insert_key(key),
             )
+            button.config(width=1)
             button.grid(row=0, column=column, sticky="nsew", padx=2)
             row.grid_columnconfigure(column, weight=1, uniform="keyboard_letter")
             self.letter_buttons.append((button, letter))
@@ -86,11 +94,13 @@ class VirtualKeyboard:
         row.grid_columnconfigure(0, weight=2)
 
         for column, letter in enumerate("zxcvbnm", start=1):
+            index = len(self.letter_buttons)
             button = self._button(
                 row,
                 letter,
-                lambda value=letter: self._insert_letter(value),
+                lambda key=index: self._insert_key(key),
             )
+            button.config(width=1)
             button.grid(row=0, column=column, sticky="nsew", padx=2)
             row.grid_columnconfigure(column, weight=1, uniform="keyboard_letter")
             self.letter_buttons.append((button, letter))
@@ -104,11 +114,14 @@ class VirtualKeyboard:
         row = Frame(self.frame, bg="#101010")
         row.pack(fill=BOTH, expand=True, padx=4, pady=(2, 5))
 
+        self.mode_button = self._button(row, "123", self._toggle_layout, font_size=11)
+        self.mode_button.grid(row=0, column=0, sticky="nsew", padx=2)
+
         close = self._button(row, "CLOSE", self._close, font_size=11)
-        close.grid(row=0, column=0, sticky="nsew", padx=2)
+        close.grid(row=0, column=1, sticky="nsew", padx=2)
 
         space = self._button(row, "SPACE", lambda: self._insert_text(" "), font_size=11)
-        space.grid(row=0, column=1, sticky="nsew", padx=2)
+        space.grid(row=0, column=2, sticky="nsew", padx=2)
 
         submit = self._button(
             row,
@@ -118,17 +131,20 @@ class VirtualKeyboard:
             active_bg="#169C46",
             font_size=11,
         )
-        submit.grid(row=0, column=2, sticky="nsew", padx=2)
+        submit.grid(row=0, column=3, sticky="nsew", padx=2)
 
         row.grid_columnconfigure(0, weight=2)
-        row.grid_columnconfigure(1, weight=5)
-        row.grid_columnconfigure(2, weight=3)
+        row.grid_columnconfigure(1, weight=2)
+        row.grid_columnconfigure(2, weight=4)
+        row.grid_columnconfigure(3, weight=3)
         row.grid_rowconfigure(0, weight=1)
 
     def show(self, target, on_submit=None, on_close=None):
         self.target = target
         self.on_submit = on_submit
         self.on_close = on_close
+        self.layout = "letters"
+        self._set_shift(False)
         self.frame.place(relx=0, rely=1, anchor="sw", relwidth=1, height=250)
         self.frame.lift()
         target.focus_set()
@@ -156,13 +172,15 @@ class VirtualKeyboard:
         selection = self._selection_range()
         if selection:
             self.target.delete(*selection)
+            self.target.icursor(selection[0])
 
         self.target.insert("insert", value)
         self.target.focus_set()
 
-    def _insert_letter(self, letter):
-        self._insert_text(letter.upper() if self.shifted else letter)
-        if self.shifted:
+    def _insert_key(self, index):
+        value = self.LAYOUTS[self.layout][index]
+        self._insert_text(value.upper() if self.layout == "letters" and self.shifted else value)
+        if self.layout == "letters" and self.shifted:
             self._set_shift(False)
 
     def _backspace(self):
@@ -180,13 +198,29 @@ class VirtualKeyboard:
         self.target.focus_set()
 
     def _toggle_shift(self):
-        self._set_shift(not self.shifted)
+        if self.layout == "letters":
+            self._set_shift(not self.shifted)
+        else:
+            self.layout = "symbols" if self.layout == "numbers" else "numbers"
+            self._update_keys()
+
+    def _toggle_layout(self):
+        self.layout = "numbers" if self.layout == "letters" else "letters"
+        self._set_shift(False)
 
     def _set_shift(self, shifted):
         self.shifted = shifted
-        self.shift_button.config(bg=self.ACCENT if shifted else self.KEY_BG)
-        for button, letter in self.letter_buttons:
-            button.config(text=letter.upper() if shifted else letter.lower())
+        self._update_keys()
+
+    def _update_keys(self):
+        letters = self.layout == "letters"
+        self.mode_button.config(text="123" if letters else "ABC")
+        self.shift_button.config(
+            text="SHIFT" if letters else "2/2" if self.layout == "numbers" else "1/2",
+            bg=self.ACCENT if letters and self.shifted else self.KEY_BG,
+        )
+        for (button, _), value in zip(self.letter_buttons, self.LAYOUTS[self.layout]):
+            button.config(text=value.upper() if letters and self.shifted else value)
 
     def _submit(self):
         query = self.target.get().strip() if self.target is not None else ""
