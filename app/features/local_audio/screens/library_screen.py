@@ -2,7 +2,6 @@ from tkinter import BOTH, LEFT, RIGHT, X
 from tkinter import Button, Canvas, Frame, Label
 
 from app.controller.controller_navigation import go_launcher
-from app.core.config import MUSIC_LIBRARY_DIR
 from app.features.local_audio.controller import (
     add_to_queue,
     play_selected_file,
@@ -65,15 +64,6 @@ def render_local_library(root, _state, button_style):
         anchor="w",
         font=(FONT, 21, "bold"),
     ).pack(fill=X)
-    Label(
-        title_frame,
-        text=MUSIC_LIBRARY_DIR,
-        fg=TEXT_DIM,
-        bg=BG,
-        anchor="w",
-        font=(FONT, 8),
-    ).pack(fill=X)
-
     Button(
         header,
         text="↻",
@@ -265,7 +255,7 @@ def render_local_library(root, _state, button_style):
             ).pack(pady=(28, 5))
             Label(
                 empty,
-                text=f"Copy audio files to\n{MUSIC_LIBRARY_DIR}",
+                text="Add supported audio files to the Music folder.",
                 fg=TEXT_MUTED,
                 bg=CARD,
                 justify="center",

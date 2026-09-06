@@ -61,7 +61,7 @@ SETTINGS_SECTIONS = (
         "Power",
         (
             ("BA", "Battery", "Battery status"),
-            ("LB", "Battery saver", "Off"),
+            ("BS", "Battery saver", "Off"),
         ),
     ),
     (
