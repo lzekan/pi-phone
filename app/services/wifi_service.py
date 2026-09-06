@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import time
+import socket
 
 from uuid import uuid4
 
@@ -47,6 +48,48 @@ def _split_row(line):
         current.append("\\")
     fields.append("".join(current))
     return fields
+
+def get_network_status():
+    try:
+        output = _run([
+            "--fields",
+            "TYPE,STATE",
+            "device",
+            "status",
+        ])
+
+        devices = [
+            _split_row(line)
+            for line in output.splitlines()
+        ]
+
+        wifi_connected = any(
+            len(device) == 2
+            and device[0] == "wifi"
+            and device[1].startswith("connected")
+            for device in devices
+        )
+    except WifiError:
+        wifi_connected = False
+
+    internet_available = False
+
+    if wifi_connected:
+        try:
+            connection = socket.create_connection(
+                ("api.spotify.com", 443),
+                timeout=2,
+            )
+            connection.close()
+            internet_available = True
+        except OSError:
+            pass
+
+    return {
+        "checked": True,
+        "wifi_connected": wifi_connected,
+        "internet_available": internet_available,
+    }
 
 
 def _networks(output):
@@ -356,6 +399,19 @@ def _run_connection_command(arguments, password=None):
         )
 
     raise WifiError(detail or "Network operation failed.")
+
+
+def set_wifi_radio_enabled(enabled):
+    action = "on" if enabled else "off"
+    expected_state = "enabled" if enabled else "disabled"
+
+    _run_connection_command(["radio", "wifi", action])
+
+    actual_state = _run(["radio", "wifi"]).strip()
+    if actual_state != expected_state:
+        raise WifiError(
+            "NetworkManager did not confirm the requested Wi-Fi state."
+        )
 
 def _create_wifi_trial(interface, network, password):
     trial_uuid = str(uuid4())

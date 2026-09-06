@@ -1,3 +1,5 @@
+import time
+
 from datetime import datetime
 from queue import Empty, Queue
 from threading import Thread
@@ -25,6 +27,24 @@ from app.ui.theme import (
 def render_launcher(root, _state):
     frame = Frame(root, bg=BG)
     battery_results = Queue()
+
+    notice_label = Label(
+        frame,
+        text="",
+        fg=TEXT,
+        bg=DANGER,
+        font=(FONT, 11, "bold"),
+        padx=18,
+        pady=9,
+        justify="center",
+        wraplength=420,
+    )
+
+    def show_notice(message):
+        _state["ui_notice"] = {
+            "message": message,
+            "expires_at": time.monotonic() + 3,
+        }
 
     header = Frame(frame, bg=BG)
     header.pack(fill=X, padx=PAGE_PAD, pady=(24, 8))
@@ -166,13 +186,22 @@ def render_launcher(root, _state):
         font=(FONT, 11),
     ).pack(fill=X, pady=(5, 0))
 
+    def open_spotify(_event=None):
+        network = _state.get("network", {})
+
+        if not network.get("internet_available", False):
+            show_notice("Spotify is unavailable while offline.")
+            return
+
+        go_home()
+
     for widget in (
         spotify_tile,
         spotify_icon,
         spotify_text,
         *spotify_text.winfo_children(),
     ):
-        widget.bind("<Button-1>", lambda _event: go_home())
+        widget.bind("<Button-1>", open_spotify)
 
     secondary = Frame(apps, bg=BG)
     secondary.pack(fill=X)
@@ -303,7 +332,30 @@ def render_launcher(root, _state):
     refresh_battery()
     poll_battery_result()
 
+    def update(current_state):
+        notice = current_state.get("ui_notice")
+
+        if not isinstance(notice, dict):
+            notice_label.place_forget()
+            return
+
+        message = notice.get("message", "")
+        expires_at = notice.get("expires_at", 0)
+
+        if not message or time.monotonic() >= expires_at:
+            current_state["ui_notice"] = None
+            notice_label.place_forget()
+            return
+
+        notice_label.config(text=message)
+        notice_label.place(
+            relx=0.5,
+            rely=0.92,
+            anchor="center",
+        )
+        notice_label.lift()
+
     return {
         "frame": frame,
-        "update": lambda _current_state: None,
+        "update": update,
     }

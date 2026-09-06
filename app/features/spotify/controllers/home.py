@@ -14,6 +14,7 @@ RECENT_TRACKS_LIMIT = 5
 
 _recent_tracks_lock = Lock()
 _saved_albums_lock = Lock()
+_home_load_lock = Lock()
 
 
 def _get_saved_albums():
@@ -106,45 +107,77 @@ def load_recently_played():
     finally:
         _recent_tracks_lock.release()
 
-
 def load_home():
+    if not _home_load_lock.acquire(blocking=False):
+        return
+
     state = get_state()
     state["home_loading"] = True
+    state["home_loaded"] = False
     state["home_error"] = None
 
     try:
         for attempt in range(HOME_LOAD_ATTEMPTS):
             try:
+                profile = spotify_service.get_me() or {}
+                user_id = profile.get("id")
+
+                if not user_id:
+                    raise RuntimeError(
+                        "Spotify profile is unavailable."
+                    )
+
                 playlists = []
-                id_me = spotify_service.get_me()["id"]
+
                 for item in spotify_service.get_user_playlists() or []:
                     images = item.get("images") or []
-                    if(item.get("owner", {}).get("id") != id_me):
+                    owner = item.get("owner") or {}
+
+                    if owner.get("id") != user_id:
                         continue
 
                     playlists.append({
                         "name": item.get("name", ""),
-                        "owner": item.get("owner", {}).get("display_name", ""),
+                        "owner": owner.get("display_name", ""),
                         "uri": item.get("uri"),
-                        "image_url": images[0]["url"] if images else None
+                        "image_url": (
+                            images[0]["url"]
+                            if images
+                            else None
+                        ),
                     })
 
                 state["playlists"] = playlists
                 state["albums"] = _get_saved_albums()
-                break
-            except (RequestConnectionError, RequestTimeout) as error:
+                state["home_loaded"] = True
+                return
+
+            except (
+                RequestConnectionError,
+                RequestTimeout,
+            ) as error:
                 if attempt == HOME_LOAD_ATTEMPTS - 1:
                     raise
 
                 print(
-                    f"[HOME WARN] Spotify connection failed: {error}. "
-                    f"Retrying in {HOME_LOAD_RETRY_DELAY}s"
+                    f"[HOME WARN] Spotify connection failed: "
+                    f"{error}. Retrying in "
+                    f"{HOME_LOAD_RETRY_DELAY}s"
                 )
                 time.sleep(HOME_LOAD_RETRY_DELAY)
+
     except Exception as error:
-        state["home_error"] = str(error)
+        print(
+            f"[HOME ERROR] Spotify Home could not be loaded: "
+            f"{error}"
+        )
+        state["home_error"] = (
+            "Spotify data is temporarily unavailable. "
+            "Try reopening Spotify."
+        )
     finally:
         state["home_loading"] = False
+        _home_load_lock.release()
 
 
 def get_user_profile():

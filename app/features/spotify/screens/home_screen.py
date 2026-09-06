@@ -6,7 +6,6 @@ from tkinter import font as tkfont
 from app.features.spotify.controllers.home import (
     load_home,
     load_recently_played,
-    load_saved_albums,
 )
 from app.controller.controller_navigation import go_launcher, go_playlist
 from app.features.spotify.controllers.player import play_selected_track
@@ -1313,9 +1312,19 @@ def render_home(root, state, button_style):
         mini_player["update"](current_state)
 
     def on_show():
-        Thread(target=load_recently_played, daemon=True).start()
-        Thread(target=load_saved_albums, daemon=True).start()
+        current_state = get_state()
 
-    Thread(target=load_home, daemon=True).start()
+        if (
+            not current_state.get("home_loaded", False)
+            and not current_state.get("home_loading", False)
+        ):
+            Thread(target=load_home, daemon=True).start()
+
+        Thread(target=load_recently_played, daemon=True).start()
+
     update(state)
-    return {"frame": frame, "update": update, "on_show": on_show}
+    return {
+        "frame": frame,
+        "update": update,
+        "on_show": on_show,
+    }

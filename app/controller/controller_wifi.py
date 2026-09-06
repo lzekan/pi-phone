@@ -6,6 +6,7 @@ from app.services.wifi_service import (
     WifiError,
     connect_wifi,
     get_wifi_snapshot,
+    set_wifi_radio_enabled,
 )
 from app.features.spotify.services.daemon_client import (
     finish_spotify_recovery,
@@ -61,6 +62,48 @@ class WifiController:
                 self.results.put((snapshot, None, None))
             except Exception as error:
                 self.results.put((None, str(error), None))
+
+        Thread(target=worker, daemon=True).start()
+        return True
+
+    def set_radio_enabled(self, enabled, on_done):
+        if self.busy:
+            return False
+
+        # Promjena stanja radija poništava oporavak pokrenut nakon
+        # prethodne promjene mreže.
+        if self.recovery_cancel is not None:
+            self.recovery_cancel.set()
+            self.recovery_cancel = None
+
+        self.recovery_generation += 1
+        self.state["spotify_reconnecting"] = False
+        self.state["spotify_reconnect_error"] = None
+        self.busy = True
+
+        def worker():
+            error = None
+            snapshot = None
+
+            try:
+                set_wifi_radio_enabled(enabled)
+            except WifiError as exception:
+                error = str(exception)
+            except Exception:
+                error = "An unexpected error occurred while changing Wi-Fi."
+
+            # Uvijek pročitaj stvarno stanje umjesto da sučelje unaprijed
+            # pretpostavi da je naredba uspjela.
+            try:
+                snapshot = get_wifi_snapshot(rescan=False)
+            except Exception:
+                if error is None:
+                    error = (
+                        "Wi-Fi was changed, but its current state could not "
+                        "be read."
+                    )
+
+            self.results.put((snapshot, error, on_done))
 
         Thread(target=worker, daemon=True).start()
         return True

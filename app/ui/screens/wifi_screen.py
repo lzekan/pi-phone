@@ -23,6 +23,8 @@ class WifiPanel:
         self.summary_label = summary_label
         self.controller = WifiController(state)
         self.last_networks = None
+        self.radio_enabled = None
+        self.radio_refresh_job = None
         self.drag_y = 0
         self.frame = Frame(parent, bg=BG)
         header = Frame(self.frame, bg=BG)
@@ -37,9 +39,31 @@ class WifiPanel:
         card.pack(fill=X, padx=PAGE_PAD, pady=(2, 10))
         Label(card, text="CURRENT CONNECTION", bg=CARD, fg=ACCENT,
               font=(FONT, 9, "bold"), anchor="w").pack(fill=X, padx=14, pady=(12, 4))
-        self.connection = Label(card, text="Loading…", bg=CARD, fg=TEXT,
-                                font=(FONT, 13, "bold"), anchor="w", justify=LEFT, wraplength=410)
-        self.connection.pack(fill=X, padx=14, pady=(0, 12))
+        status_row = Frame(card, bg=CARD)
+        status_row.pack(fill=X, padx=14, pady=(0, 12))
+        self.connection = Label(
+            status_row,
+            text="Loading…",
+            bg=CARD,
+            fg=TEXT,
+            font=(FONT, 13, "bold"),
+            anchor="w",
+            justify=LEFT,
+            wraplength=300,
+        )
+        self.connection.pack(side=LEFT, fill=X, expand=True)
+        self.radio_toggle = self._button(
+            status_row,
+            "…",
+            self._toggle_wifi,
+        )
+        self.radio_toggle.config(
+            state="disabled",
+            width=7,
+            padx=8,
+            pady=8,
+        )
+        self.radio_toggle.pack(side=RIGHT, padx=(10, 0))
         Label(self.frame, text="AVAILABLE NETWORKS", bg=BG, fg=TEXT_MUTED,
               font=(FONT, 9, "bold"), anchor="w").pack(fill=X, padx=PAGE_PAD, pady=(6, 10))
         self.message = Label(self.frame, text="", bg=BG, fg=TEXT_MUTED,
@@ -79,6 +103,58 @@ class WifiPanel:
         self.frame.place(x=0, y=0, relwidth=1, relheight=1)
         self.frame.lift()
         self.refresh(False)
+
+    def _toggle_wifi(self):
+        if self.controller.busy or self.radio_enabled is None:
+            return
+
+        enable = not self.radio_enabled
+        started = self.controller.set_radio_enabled(
+            enable,
+            on_done=self._on_radio_done,
+        )
+        if not started:
+            return
+
+        self.radio_toggle.config(
+            text="…",
+            state="disabled",
+            bg=SURFACE_ALT,
+        )
+        self.refresh_button.config(state="disabled")
+        self._set_message(
+            "Turning Wi-Fi on…" if enable else "Turning Wi-Fi off…"
+        )
+
+    def _on_radio_done(self, snapshot, error):
+        if snapshot is not None:
+            self._render(snapshot, None)
+        else:
+            self._render(
+                None,
+                "Could not read the current Wi-Fi status.",
+            )
+
+        if error:
+            self._set_message(error, DANGER)
+            return
+
+        if snapshot["radio_enabled"]:
+            self._set_message("Wi-Fi turned on. Reconnecting…", ACCENT)
+
+            if self.radio_refresh_job is not None:
+                self.frame.after_cancel(self.radio_refresh_job)
+            self.radio_refresh_job = self.frame.after(
+                2000,
+                self._refresh_after_radio_on,
+            )
+        else:
+            self._set_message("Wi-Fi is turned off.")
+
+    def _refresh_after_radio_on(self):
+        self.radio_refresh_job = None
+        if self.frame.winfo_ismapped() and not self.controller.busy:
+            self.refresh(False)
 
     def _create_connection_panel(self):
         self.connection_panel = Frame(self.frame, bg=BG)
@@ -423,6 +499,10 @@ class WifiPanel:
         self.frame.place_forget()
 
     def refresh(self, rescan=False):
+        if rescan and self.radio_enabled is False:
+            self._set_message("Turn Wi-Fi on before scanning for networks.")
+            return
+
         if self.controller.refresh(rescan):
             self.refresh_button.config(state="disabled")
             self._set_message("Scanning…" if rescan else "Reading networks…")
@@ -473,8 +553,10 @@ class WifiPanel:
         self.job = self.frame.after(100, self._pump)
 
     def _render(self, snapshot, error):
-        self.refresh_button.config(state="normal")
         if error:
+            self.refresh_button.config(state="normal")
+            self.radio_toggle.config(state="disabled", text="…")
+            self.radio_enabled = None
             self._set_message(error, DANGER)
             self.connection.config(text="Status unavailable")
             self.summary_label.config(text="Unavailable")
@@ -487,12 +569,33 @@ class WifiPanel:
             name = "No Wi-Fi adapter found"
         elif not snapshot["radio_enabled"]:
             name = "Wi-Fi is off"
+        self.radio_enabled = snapshot["radio_enabled"]
         self.connection.config(text=name)
-        self.summary_label.config(text="Connected" if snapshot["connected"] else "Not connected")
+        self.summary_label.config(
+            text=(
+                "Off"
+                if not snapshot["radio_enabled"]
+                else "Connected" if snapshot["connected"] else "Not connected"
+            )
+        )
+        self.radio_toggle.config(
+            text="ON" if snapshot["radio_enabled"] else "OFF",
+            state="normal" if snapshot["interface"] is not None else "disabled",
+            bg=ACCENT if snapshot["radio_enabled"] else SURFACE_ALT,
+        )
+        self.refresh_button.config(
+            state=(
+                "normal"
+                if snapshot["interface"] is not None
+                and snapshot["radio_enabled"]
+                else "disabled"
+            )
+        )
         networks = snapshot["networks"]
         scan_error = snapshot.get("scan_error")
         self._set_message(
             f"Scan failed; showing cached networks. {scan_error}" if scan_error else
+            "Wi-Fi is turned off." if not snapshot["radio_enabled"] else
             "" if networks else "No visible networks found.",
             DANGER if scan_error else TEXT_MUTED)
         if networks == self.last_networks:
@@ -567,3 +670,6 @@ class WifiPanel:
             if self.job is not None:
                 self.frame.after_cancel(self.job)
                 self.job = None
+            if self.radio_refresh_job is not None:
+                self.frame.after_cancel(self.radio_refresh_job)
+                self.radio_refresh_job = None

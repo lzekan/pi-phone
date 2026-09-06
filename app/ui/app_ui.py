@@ -1,3 +1,5 @@
+import time
+
 from app.controller.controller_navigation import go_launcher
 from app.core.state import get_state
 from app.ui.screens.launcher_screen import render_launcher
@@ -9,8 +11,10 @@ from app.features.local_audio.screens.library_screen import render_local_library
 from app.controller.controller_queue import update_queue
 from app.controller.controller_brightness import apply_saved_brightness
 from app.controller.controller_screen_timeout import start_screen_timeout
+from app.services.network_monitor import NetworkMonitor
 from app.ui.theme import SURFACE_ALT, SURFACE_ACTIVE, TEXT, FONT
 
+NETWORK_DISCONNECT_GRACE_SECONDS = 5
 
 BUTTON_STYLE = {
     "font": (FONT, 12, "bold"),
@@ -27,6 +31,17 @@ BUTTON_STYLE = {
     "state": "normal",
 }
 
+def _is_spotify_screen(state):
+    screen = state.get("screen")
+
+    if screen in ("home", "playlist"):
+        return True
+
+    if screen == "player":
+        return state.get("song", {}).get("source") == "spotify"
+
+    return False
+
 
 def start_ui(root):
     go_launcher()
@@ -40,6 +55,8 @@ def start_ui(root):
         print(f"[BRIGHTNESS ERROR] {error}")
 
     start_screen_timeout(root)
+    network_monitor = NetworkMonitor(get_state())
+    network_monitor.start()
 
     screens = {
         "home": render_home(root, get_state(), BUTTON_STYLE),
@@ -94,5 +111,49 @@ def start_ui(root):
 
         root.after(500, queue_tick)
 
+    def network_tick():
+        network_monitor.poll()
+
+        state = get_state()
+        network = state["network"]
+        now = time.monotonic()
+
+        if network.get("checked"):
+            if network.get("internet_available"):
+                network["offline_since"] = None
+            else:
+                if network.get("offline_since") is None:
+                    network["offline_since"] = now
+
+                offline_duration = (
+                    now - network["offline_since"]
+                )
+
+                if (
+                    offline_duration
+                    >= NETWORK_DISCONNECT_GRACE_SECONDS
+                    and _is_spotify_screen(state)
+                ):
+                    state["screen"] = "launcher"
+
+                    if network.get("wifi_connected"):
+                        message = (
+                            "Internet connection lost. "
+                            "Spotify is unavailable."
+                        )
+                    else:
+                        message = (
+                            "Wi-Fi disconnected. "
+                            "Spotify is unavailable."
+                        )
+
+                    state["ui_notice"] = {
+                        "message": message,
+                        "expires_at": now + 3,
+                    }
+
+        root.after(250, network_tick)
+
+    network_tick()
     queue_tick()
     render()
